@@ -55,8 +55,13 @@ tests/
 1. Reads OpenGeoMetadata JSON files from `tmp/opengeometadata/`
 2. Transforms field names from GeoBlacklight schema to simplified schema
 3. Converts geometries from WKT/ENVELOPE to GeoJSON
-4. Extracts thumbnail URLs from references field
-5. Writes data to `tmp/ogm.parquet` with ZSTD compression
+4. Creates native geometry field in WKB (Well-Known Binary) format
+5. Extracts thumbnail URLs from references field
+6. Writes data to `tmp/ogm.parquet` with ZSTD compression
+
+The generated Parquet file includes both:
+- **geojson** (string): GeoJSON text representation for compatibility
+- **geometry** (binary): WKB-encoded geometry for efficient spatial operations
 
 ## Testing
 
@@ -84,21 +89,30 @@ uv run pytest tests/test_geometry.py
 uv run pytest -k "envelope"
 ```
 
-## Post-Processing with DuckDB
+## Geometry Support
 
-After generating `ogm.parquet`, add a native geometry column:
+The harvester automatically creates a native geometry field in WKB (Well-Known Binary) format. No post-processing is needed!
 
-```bash
-duckdb -c "
-COPY (
-  SELECT *,
-    ST_GeomFromGeoJSON(geojson) AS geometry
-  FROM 'tmp/ogm.parquet'
-) TO 'tmp/cloud.parquet' (FORMAT PARQUET, COMPRESSION zstd, PARQUET_VERSION v2);
-"
+The Parquet file includes:
+- **geojson**: Text GeoJSON for display and compatibility
+- **geometry**: Binary WKB for efficient spatial queries with DuckDB
+
+To use with DuckDB spatial functions:
+```sql
+-- Query by bounding box
+SELECT * FROM 'ogm.parquet'
+WHERE ST_Intersects(
+  ST_GeomFromWKB(geometry),
+  ST_MakeEnvelope(-122.5, 37.7, -122.0, 37.8)
+);
+
+-- Or use the geojson field
+SELECT * FROM 'ogm.parquet'
+WHERE ST_Intersects(
+  ST_GeomFromGeoJSON(geojson),
+  ST_MakeEnvelope(-122.5, 37.7, -122.0, 37.8)
+);
 ```
-
-This creates `cloud.parquet` with WKB geometry for efficient spatial queries.
 
 ## Differences from Ruby Version
 
