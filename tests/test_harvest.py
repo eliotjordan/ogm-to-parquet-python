@@ -309,3 +309,46 @@ class TestOgmToParquet:
         # Should process valid document despite error with bad document
         assert len(harvester.rows) >= 1
         assert output_path.exists()
+
+    def test_collect_documents_skips_non_dict_json(self, tmp_path):
+        """Test that non-dict JSON documents are skipped."""
+        ogm_path = tmp_path / "opengeometadata"
+        output_path = tmp_path / "output.parquet"
+        ogm_path.mkdir()
+
+        # Create JSON file with string instead of dict
+        (ogm_path / "string.json").write_text(json.dumps("just a string"))
+
+        # Create JSON file with array
+        (ogm_path / "array.json").write_text(json.dumps([1, 2, 3]))
+
+        # Create valid dict document
+        (ogm_path / "valid.json").write_text(json.dumps({"id": "valid-123"}))
+
+        harvester = OgmToParquet(str(ogm_path), str(output_path))
+        docs = harvester._collect_documents()
+
+        # Should only collect the valid dict document
+        assert len(docs) == 1
+        assert docs[0]["id"] == "valid-123"
+
+    def test_convert_skips_non_dict_documents(self, tmp_path, caplog):
+        """Test that convert skips non-dict documents gracefully."""
+        ogm_path = tmp_path / "opengeometadata"
+        output_path = tmp_path / "output.parquet"
+        ogm_path.mkdir()
+
+        # Create non-dict JSON
+        (ogm_path / "string.json").write_text(json.dumps("string document"))
+
+        # Create valid document
+        valid_doc = {"id": "valid-123", "dct_title_s": "Valid Document"}
+        (ogm_path / "valid.json").write_text(json.dumps(valid_doc))
+
+        harvester = OgmToParquet(str(ogm_path), str(output_path))
+        harvester.convert()
+
+        # Should process only the valid document
+        assert len(harvester.rows) == 1
+        assert harvester.rows[0]["id"] == "valid-123"
+        assert output_path.exists()

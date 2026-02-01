@@ -97,13 +97,19 @@ class OgmToParquet:
 
         for doc in docs:
             try:
+                # Skip non-dict documents
+                if not isinstance(doc, dict):
+                    logger.warning(f"Skipping non-dict document: {type(doc)}")
+                    continue
+
                 doc_id = doc.get("id", "unknown")
                 logger.info(doc_id)
                 remapped_doc = self._remap_and_clean(doc)
                 row = self._build_row(remapped_doc)
                 self.rows.append(row)
             except Exception as e:
-                logger.warning(f"Error processing {doc.get('id', 'unknown')}: {e}")
+                doc_id = doc.get("id", "unknown") if isinstance(doc, dict) else "unknown"
+                logger.warning(f"Error processing {doc_id}: {e}")
                 continue
 
         self._write_parquet()
@@ -129,7 +135,11 @@ class OgmToParquet:
             try:
                 with open(json_file, "r", encoding="utf-8") as f:
                     doc = json.load(f)
-                    documents.append(doc)
+                    # Only collect dict documents (skip strings, lists, etc.)
+                    if isinstance(doc, dict):
+                        documents.append(doc)
+                    else:
+                        logger.debug(f"Skipping non-dict JSON in {json_file}: {type(doc)}")
             except Exception as e:
                 logger.warning(f"Error reading {json_file}: {e}")
                 continue
