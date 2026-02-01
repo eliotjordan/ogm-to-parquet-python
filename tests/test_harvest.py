@@ -111,6 +111,31 @@ class TestOgmToParquet:
         assert harvester._ensure_list("single") == ["single"]
         assert harvester._ensure_list(123) == [123]
 
+    def test_ensure_string_with_none(self, harvester):
+        """Test ensure_string with None value."""
+        assert harvester._ensure_string(None) is None
+
+    def test_ensure_string_with_string(self, harvester):
+        """Test ensure_string with string value."""
+        assert harvester._ensure_string("test") == "test"
+
+    def test_ensure_string_with_list(self, harvester):
+        """Test ensure_string with list value."""
+        assert harvester._ensure_string(["a", "b", "c"]) == "a b c"
+        assert harvester._ensure_string(["single"]) == "single"
+
+    def test_ensure_string_with_empty_list(self, harvester):
+        """Test ensure_string with empty list returns None."""
+        assert harvester._ensure_string([]) is None
+
+    def test_ensure_string_with_list_containing_none(self, harvester):
+        """Test ensure_string filters None from lists."""
+        assert harvester._ensure_string(["a", None, "b"]) == "a b"
+
+    def test_ensure_string_with_number(self, harvester):
+        """Test ensure_string converts numbers to strings."""
+        assert harvester._ensure_string(123) == "123"
+
     def test_extract_geojson_with_bbox(self, harvester):
         """Test GeoJSON extraction from bbox field."""
         doc = {"bbox": "ENVELOPE(-122, -121, 38, 37)"}

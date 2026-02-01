@@ -219,26 +219,26 @@ class OgmToParquet:
             Dictionary with fields matching PARQUET_SCHEMA
         """
         return {
-            "id": doc.get("id"),
-            "title": doc.get("title"),
+            "id": self._ensure_string(doc.get("id")),
+            "title": self._ensure_string(doc.get("title")),
             "creator": self._ensure_list(doc.get("creator")),
             "location": self._ensure_list(doc.get("location")),
             "publisher": self._ensure_list(doc.get("publisher")),
-            "provider": doc.get("provider"),
-            "access_rights": doc.get("access_rights"),
+            "provider": self._ensure_string(doc.get("provider")),
+            "access_rights": self._ensure_string(doc.get("access_rights")),
             "resource_class": self._ensure_list(doc.get("resource_class")),
             "resource_type": self._ensure_list(doc.get("resource_type")),
             "subject": self._ensure_list(doc.get("subject")),
             "theme": self._ensure_list(doc.get("theme")),
             "thumbnail": self._extract_thumbnail_url(doc),
             "geojson": self._extract_geojson(doc),
-            "description": doc.get("description"),
-            "format": doc.get("format"),
+            "description": self._ensure_string(doc.get("description")),
+            "format": self._ensure_string(doc.get("format")),
             "identifier": self._ensure_list(doc.get("identifier")),
-            "references": doc.get("references"),
+            "references": self._ensure_string(doc.get("references")),
             "temporal": self._ensure_list(doc.get("temporal")),
-            "wxs_identifier": doc.get("wxs_identifier"),
-            "modified": doc.get("modified"),
+            "wxs_identifier": self._ensure_string(doc.get("wxs_identifier")),
+            "modified": self._ensure_string(doc.get("modified")),
             "index_year": self._ensure_list(doc.get("index_year")),
             "full_text": None,  # Not populated in Ruby version either
         }
@@ -257,6 +257,27 @@ class OgmToParquet:
         if isinstance(value, list):
             return value if value else None
         return [value]
+
+    def _ensure_string(self, value: Any) -> Optional[str]:
+        """Ensure value is a string or None.
+
+        If value is a list, join elements with a space.
+        If value is not a string, convert to string.
+
+        Args:
+            value: Value to convert
+
+        Returns:
+            String or None
+        """
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value
+        if isinstance(value, list):
+            # Join list elements with space, filtering out None values
+            return " ".join(str(item) for item in value if item is not None) if value else None
+        return str(value)
 
     def _extract_geojson(self, doc: Dict[str, Any]) -> Optional[str]:
         """Extract GeoJSON from bbox field.
