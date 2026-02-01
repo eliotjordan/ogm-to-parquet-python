@@ -176,6 +176,8 @@ class OgmToParquet:
     def _clean_values(self, doc: Dict[str, Any]) -> Dict[str, Any]:
         """Clean values by removing single quotes (prevents SQL injection).
 
+        Preserves numeric types (int, float) to maintain schema compatibility.
+
         Args:
             doc: Document to clean
 
@@ -189,11 +191,14 @@ class OgmToParquet:
             elif isinstance(value, str):
                 cleaned[key] = value.replace("'", "")
             else:
+                # Preserve numeric and other non-string types
                 cleaned[key] = value
         return cleaned
 
     def _clean_array(self, arr: List[Any]) -> List[Any]:
         """Clean array values by removing single quotes from strings.
+
+        Preserves numeric types (int, float) in arrays.
 
         Args:
             arr: Array to clean
@@ -206,6 +211,7 @@ class OgmToParquet:
             if isinstance(item, str):
                 cleaned.append(item.replace("'", ""))
             else:
+                # Preserve numeric and other non-string types
                 cleaned.append(item)
         return cleaned
 
@@ -239,7 +245,7 @@ class OgmToParquet:
             "temporal": self._ensure_list(doc.get("temporal")),
             "wxs_identifier": self._ensure_string(doc.get("wxs_identifier")),
             "modified": self._ensure_string(doc.get("modified")),
-            "index_year": self._ensure_list(doc.get("index_year")),
+            "index_year": self._ensure_float_list(doc.get("index_year")),
             "full_text": None,  # Not populated in Ruby version either
         }
 
@@ -257,6 +263,45 @@ class OgmToParquet:
         if isinstance(value, list):
             return value if value else None
         return [value]
+
+    def _ensure_float_list(self, value: Any) -> Optional[List[float]]:
+        """Ensure value is a list of floats or None.
+
+        Converts strings to floats where possible.
+
+        Args:
+            value: Value to convert
+
+        Returns:
+            List of floats or None
+        """
+        if value is None:
+            return None
+
+        # Convert to list first
+        if not isinstance(value, list):
+            value = [value]
+
+        if not value:  # Empty list
+            return None
+
+        # Convert all items to floats
+        float_list = []
+        for item in value:
+            if item is None:
+                continue
+            try:
+                if isinstance(item, (int, float)):
+                    float_list.append(float(item))
+                elif isinstance(item, str):
+                    # Try to convert string to float
+                    float_list.append(float(item))
+            except (ValueError, TypeError):
+                # Skip items that can't be converted
+                logger.debug(f"Could not convert {item} to float")
+                continue
+
+        return float_list if float_list else None
 
     def _ensure_string(self, value: Any) -> Optional[str]:
         """Ensure value is a string or None.

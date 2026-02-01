@@ -136,6 +136,44 @@ class TestOgmToParquet:
         """Test ensure_string converts numbers to strings."""
         assert harvester._ensure_string(123) == "123"
 
+    def test_ensure_float_list_with_none(self, harvester):
+        """Test ensure_float_list with None value."""
+        assert harvester._ensure_float_list(None) is None
+
+    def test_ensure_float_list_with_int_list(self, harvester):
+        """Test ensure_float_list with list of integers."""
+        result = harvester._ensure_float_list([1869, 1870, 1871])
+        assert result == [1869.0, 1870.0, 1871.0]
+
+    def test_ensure_float_list_with_string_list(self, harvester):
+        """Test ensure_float_list with list of string numbers."""
+        result = harvester._ensure_float_list(["1869", "1870", "1871"])
+        assert result == [1869.0, 1870.0, 1871.0]
+
+    def test_ensure_float_list_with_mixed_list(self, harvester):
+        """Test ensure_float_list with mixed types."""
+        result = harvester._ensure_float_list([1869, "1870", 1871.5])
+        assert result == [1869.0, 1870.0, 1871.5]
+
+    def test_ensure_float_list_with_empty_list(self, harvester):
+        """Test ensure_float_list with empty list returns None."""
+        assert harvester._ensure_float_list([]) is None
+
+    def test_ensure_float_list_with_scalar(self, harvester):
+        """Test ensure_float_list converts scalar to list."""
+        result = harvester._ensure_float_list(1869)
+        assert result == [1869.0]
+
+    def test_ensure_float_list_with_invalid_strings(self, harvester):
+        """Test ensure_float_list skips invalid values."""
+        result = harvester._ensure_float_list(["1869", "invalid", "1870"])
+        assert result == [1869.0, 1870.0]
+
+    def test_ensure_float_list_with_none_in_list(self, harvester):
+        """Test ensure_float_list filters None from list."""
+        result = harvester._ensure_float_list([1869, None, 1870])
+        assert result == [1869.0, 1870.0]
+
     def test_extract_geojson_with_bbox(self, harvester):
         """Test GeoJSON extraction from bbox field."""
         doc = {"bbox": "ENVELOPE(-122, -121, 38, 37)"}
