@@ -9,6 +9,9 @@ dependencies = [
     "geojson>=3.0.0",
 ]
 
+[project.scripts]
+ogm-harvest = "ogm_to_parquet.harvest:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
