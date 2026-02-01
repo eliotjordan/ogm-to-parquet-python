@@ -53,6 +53,7 @@ class VocabularyBuilder:
         max_vocab_size: int = 10000,
         min_term_freq: int = 2,
         include_bigrams: bool = True,
+        limit_controlled_vocab: bool = False,
     ):
         """Initialize vocabulary builder.
 
@@ -60,10 +61,13 @@ class VocabularyBuilder:
             max_vocab_size: Maximum number of terms to extract from free-text fields
             min_term_freq: Minimum frequency for a term to be included
             include_bigrams: Whether to include bigrams (2-word phrases)
+            limit_controlled_vocab: If True, only include most frequent controlled vocab terms
+                                   (useful for smaller models)
         """
         self.max_vocab_size = max_vocab_size
         self.min_term_freq = min_term_freq
         self.include_bigrams = include_bigrams
+        self.limit_controlled_vocab = limit_controlled_vocab
         self.vocab: Set[str] = set()
 
     def build_vocabulary(self, documents: List[Dict[str, Any]]) -> List[str]:
@@ -103,23 +107,57 @@ class VocabularyBuilder:
         Returns:
             Set of controlled vocabulary terms
         """
-        terms = set()
+        if self.limit_controlled_vocab:
+            # For smaller models, only include most frequent controlled vocab terms
+            term_counts = Counter()
 
-        for doc in documents:
-            for field in CONTROLLED_VOCAB_FIELDS:
-                value = doc.get(field)
-                if value is None:
-                    continue
+            for doc in documents:
+                for field in CONTROLLED_VOCAB_FIELDS:
+                    value = doc.get(field)
+                    if value is None:
+                        continue
 
-                # Handle both single values and lists
-                if isinstance(value, list):
-                    for item in value:
-                        if item and isinstance(item, str):
-                            terms.add(item.strip().lower())
-                elif isinstance(value, str) and value:
-                    terms.add(value.strip().lower())
+                    # Handle both single values and lists
+                    if isinstance(value, list):
+                        for item in value:
+                            if item and isinstance(item, str):
+                                term_counts[item.strip().lower()] += 1
+                    elif isinstance(value, str) and value:
+                        term_counts[value.strip().lower()] += 1
 
-        return terms
+            # Keep only top terms that appear at least min_term_freq times
+            terms = {
+                term for term, count in term_counts.items()
+                if count >= self.min_term_freq
+            }
+
+            # Limit to max_vocab_size // 2 to leave room for free-text terms
+            if len(terms) > self.max_vocab_size // 2:
+                top_terms = [
+                    term for term, _ in term_counts.most_common(self.max_vocab_size // 2)
+                ]
+                terms = set(top_terms)
+
+            return terms
+        else:
+            # Original behavior: include all controlled vocab terms
+            terms = set()
+
+            for doc in documents:
+                for field in CONTROLLED_VOCAB_FIELDS:
+                    value = doc.get(field)
+                    if value is None:
+                        continue
+
+                    # Handle both single values and lists
+                    if isinstance(value, list):
+                        for item in value:
+                            if item and isinstance(item, str):
+                                terms.add(item.strip().lower())
+                    elif isinstance(value, str) and value:
+                        terms.add(value.strip().lower())
+
+            return terms
 
     def _extract_free_text_terms(
         self, documents: List[Dict[str, Any]]

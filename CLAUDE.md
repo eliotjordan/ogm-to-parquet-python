@@ -15,8 +15,17 @@ uv sync --all-extras
 # Install with distillation support (includes torch and sentence-transformers)
 uv sync --extra distill
 
-# Run harvester (with embeddings enabled by default)
+# Run harvester with default settings (128 dims, 5K vocab, ~15MB model)
 uv run ogm-harvest
+
+# Run with small model (~8 MB, good for web)
+uv run ogm-harvest --embedding-dims 64 --max-vocab-size 2000
+
+# Run with tiny model (~5 MB, for mobile)
+uv run ogm-harvest --embedding-dims 32 --max-vocab-size 1000
+
+# Run without embeddings
+uv run ogm-harvest --no-embeddings
 
 # Run tests
 uv run pytest
@@ -202,14 +211,25 @@ The harvester builds a custom vocabulary from metadata fields:
 ### Model Distillation
 
 Uses Model2Vec to distill `sentence-transformers/all-MiniLM-L6-v2`:
-- PCA reduction to 256 dimensions (customizable)
+- PCA reduction to configurable dimensions (32, 64, 128, or 256)
 - Custom vocabulary ensures good coverage of domain terms
+- Configurable vocabulary size (1K to 10K+ terms)
 - Output files saved to `tmp/ogm-model/`:
   - `tokenizer.json` - HuggingFace tokenizer (for browser use)
   - `model.safetensors` - Model weights in safetensors format
-  - `embeddings.safetensors` - Embedding matrix in safetensors format
   - `embeddings.bin` - Raw float32 binary (easier to load in browser)
   - `metadata.json` - Vocab size, embedding dims, base model info
+
+**Model Size Options:**
+
+| Configuration | Model Size | Vocabulary | Quality |
+|--------------|------------|------------|---------|
+| 32 dims, 1K vocab | ~5 MB | Most frequent 1000 terms | Good |
+| 64 dims, 2K vocab | ~8 MB | Most frequent 2000 terms | Very Good |
+| 128 dims, 5K vocab | ~15 MB | Most frequent 5000 terms | Excellent (default) |
+| 256 dims, 10K vocab | ~35 MB | 10000+ terms | Best |
+
+For smaller models (vocab < 10K), controlled vocabulary is limited to most frequent terms only.
 
 ### Browser Loading
 

@@ -21,8 +21,20 @@ uv sync --extra distill
 ## Usage
 
 ```bash
-# Run the harvester (embeddings enabled by default)
+# Run with default settings (256 dims, 5K vocab, ~15MB model)
 uv run ogm-harvest
+
+# Generate a small model (~8 MB, good for web)
+uv run ogm-harvest --embedding-dims 64 --max-vocab-size 2000
+
+# Generate a tiny model (~5 MB, for mobile)
+uv run ogm-harvest --embedding-dims 32 --max-vocab-size 1000
+
+# Generate a large model (~35 MB, best quality)
+uv run ogm-harvest --embedding-dims 256 --max-vocab-size 10000
+
+# Disable embeddings entirely
+uv run ogm-harvest --no-embeddings
 
 # Or run the module directly
 uv run python -m ogm_to_parquet.harvest
@@ -35,16 +47,28 @@ The harvester automatically generates semantic embeddings for each document:
 1. **Vocabulary Building**: Extracts vocabulary from metadata fields
    - Controlled vocabulary: creator, location, provider, resource_class, subject, theme, format
    - Free-text terms: title, description, publisher (common terms extracted)
+   - Configurable size: 1K to 10K+ terms
 
 2. **Model Distillation**: Creates a small, browser-compatible model
    - Distills `sentence-transformers/all-MiniLM-L6-v2`
    - Custom vocabulary ensures good domain coverage
-   - Reduces to 256 dimensions for small file size (~1-2 MB)
+   - Configurable dimensions: 32, 64, 128, or 256
    - Outputs saved to `tmp/ogm-model/`
 
-3. **Document Embedding**: Generates 256-dim vectors for each record
+3. **Document Embedding**: Generates embedding vectors for each record
    - Saved in `embeddings` field in Parquet file
    - Suitable for semantic search in DuckDB or browser
+
+### Model Sizes
+
+| Configuration | Model Size | Quality | Use Case |
+|--------------|------------|---------|----------|
+| 32 dims, 1K vocab | ~5 MB | Good | Mobile apps |
+| 64 dims, 2K vocab | ~8 MB | Very Good | Web apps (recommended) |
+| 128 dims, 5K vocab | ~15 MB | Excellent | Default |
+| 256 dims, 10K vocab | ~35 MB | Best | Desktop apps |
+
+See `examples_model_sizes.md` for detailed configuration examples.
 
 ### Disabling Embeddings
 

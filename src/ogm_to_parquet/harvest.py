@@ -69,7 +69,6 @@ PARQUET_SCHEMA = pa.schema(
         ("wxs_identifier", pa.string()),
         ("modified", pa.string()),
         ("index_year", pa.list_(pa.float64())),
-        ("full_text", pa.string()),
         ("embeddings", pa.list_(pa.float32())),
     ]
 )
@@ -84,6 +83,8 @@ class OgmToParquet:
         output_path: str = "./tmp/ogm.parquet",
         model_dir: str = "./tmp/ogm-model/",
         enable_embeddings: bool = True,
+        embedding_dims: int = 256,
+        max_vocab_size: int = 5000,
     ):
         """Initialize the harvester.
 
@@ -92,11 +93,17 @@ class OgmToParquet:
             output_path: Path for output Parquet file
             model_dir: Directory to save distilled embedding model
             enable_embeddings: Whether to generate embeddings (requires model2vec)
+            embedding_dims: Target dimensions for embeddings (lower = smaller model)
+                           Recommended: 256 (default), 128 (smaller), 64 (smallest)
+            max_vocab_size: Maximum vocabulary size (lower = smaller model)
+                           Recommended: 5000 (default, ~15MB), 2000 (~8MB), 1000 (~5MB)
         """
         self.ogm_path = Path(ogm_path)
         self.output_path = Path(output_path)
         self.model_dir = Path(model_dir)
         self.enable_embeddings = enable_embeddings
+        self.embedding_dims = embedding_dims
+        self.max_vocab_size = max_vocab_size
         self.rows: List[Dict[str, Any]] = []
         self.embedding_generator: Optional[EmbeddingGenerator] = None
 
@@ -149,10 +156,12 @@ class OgmToParquet:
                 remapped_docs.append(self._remap_and_clean(doc))
 
         # Build vocabulary from all documents
+        # Reduce vocabulary for smaller models
         vocab_builder = VocabularyBuilder(
-            max_vocab_size=10000,
+            max_vocab_size=self.max_vocab_size,
             min_term_freq=2,
-            include_bigrams=True,
+            include_bigrams=self.embedding_dims >= 128,  # Skip bigrams for very small models
+            limit_controlled_vocab=self.max_vocab_size < 10000,  # Limit controlled vocab for small models
         )
         vocabulary = vocab_builder.build_vocabulary(remapped_docs)
 
@@ -161,7 +170,7 @@ class OgmToParquet:
             vocabulary=vocabulary,
             output_dir=str(self.model_dir),
             base_model="sentence-transformers/all-MiniLM-L6-v2",
-            pca_dims=256,
+            pca_dims=self.embedding_dims,
         )
 
         # Create embedding generator
@@ -309,7 +318,6 @@ class OgmToParquet:
             "wxs_identifier": self._ensure_string(doc.get("wxs_identifier")),
             "modified": self._ensure_string(doc.get("modified")),
             "index_year": self._ensure_float_list(doc.get("index_year")),
-            "full_text": None,  # Not populated in Ruby version either
             "embeddings": embeddings,
         }
 
@@ -458,7 +466,37 @@ class OgmToParquet:
 
 def main():
     """Main entry point for the harvester."""
-    harvester = OgmToParquet()
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Convert OpenGeoMetadata JSON to Parquet with embeddings"
+    )
+    parser.add_argument(
+        "--embedding-dims",
+        type=int,
+        default=256,
+        choices=[32, 64, 128, 256],
+        help="Embedding dimensions (lower = smaller model). Default: 256",
+    )
+    parser.add_argument(
+        "--max-vocab-size",
+        type=int,
+        default=5000,
+        help="Maximum vocabulary size (lower = smaller model). Default: 5000",
+    )
+    parser.add_argument(
+        "--no-embeddings",
+        action="store_true",
+        help="Disable embedding generation",
+    )
+
+    args = parser.parse_args()
+
+    harvester = OgmToParquet(
+        enable_embeddings=not args.no_embeddings,
+        embedding_dims=args.embedding_dims,
+        max_vocab_size=args.max_vocab_size,
+    )
     harvester.convert()
 
 
