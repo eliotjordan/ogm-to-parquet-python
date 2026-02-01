@@ -192,6 +192,44 @@ class TestOgmToParquet:
 
         assert result is None
 
+    def test_extract_geometry_wkb_with_valid_geojson(self, harvester):
+        """Test WKB extraction from valid GeoJSON."""
+        geojson = '{"type": "Point", "coordinates": [-122.0, 37.5]}'
+
+        result = harvester._extract_geometry_wkb(geojson)
+
+        assert result is not None
+        assert isinstance(result, bytes)
+        # WKB should start with byte order marker
+        assert len(result) > 0
+
+    def test_extract_geometry_wkb_with_polygon(self, harvester):
+        """Test WKB extraction from polygon GeoJSON."""
+        geojson = '{"type": "Polygon", "coordinates": [[[-122.5, 37.8], [-122.5, 37.7], [-122.0, 37.7], [-122.0, 37.8], [-122.5, 37.8]]]}'
+
+        result = harvester._extract_geometry_wkb(geojson)
+
+        assert result is not None
+        assert isinstance(result, bytes)
+
+    def test_extract_geometry_wkb_with_none(self, harvester):
+        """Test WKB extraction with None input."""
+        result = harvester._extract_geometry_wkb(None)
+
+        assert result is None
+
+    def test_extract_geometry_wkb_with_invalid_json(self, harvester):
+        """Test WKB extraction with invalid JSON."""
+        result = harvester._extract_geometry_wkb("not valid json")
+
+        assert result is None
+
+    def test_extract_geometry_wkb_with_invalid_geojson(self, harvester):
+        """Test WKB extraction with invalid GeoJSON structure."""
+        result = harvester._extract_geometry_wkb('{"invalid": "structure"}')
+
+        assert result is None
+
     def test_extract_thumbnail_url_schema_org(self, harvester):
         """Test thumbnail extraction with schema.org URL."""
         references = {
