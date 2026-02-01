@@ -1,0 +1,41 @@
+[project]
+name = "ogm-to-parquet"
+version = "0.1.0"
+description = "Convert OpenGeoMetadata JSON to Parquet format"
+requires-python = ">=3.11"
+dependencies = [
+    "pyarrow>=18.0.0",
+    "shapely>=2.0.0",
+    "geojson>=3.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=6.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "--cov=src/ogm_to_parquet --cov-report=term-missing --cov-report=html"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ogm_to_parquet"]
+
+[tool.coverage.run]
+source = ["src/ogm_to_parquet"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
