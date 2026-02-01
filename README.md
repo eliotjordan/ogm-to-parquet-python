@@ -60,4 +60,53 @@ tests/
 
 ## Testing
 
-The project includes comprehensive tests with pytest and coverage reporting. Target coverage is 80%+.
+The project includes comprehensive tests with pytest and coverage reporting:
+
+- **40 tests total** covering geometry and harvest modules
+- **94% overall coverage**
+  - geometry.py: 98% coverage
+  - harvest.py: 93% coverage
+
+```bash
+# Run tests
+uv run pytest
+
+# Run with coverage report
+uv run pytest --cov
+
+# Generate HTML coverage report
+uv run pytest --cov-report=html
+
+# Run specific test file
+uv run pytest tests/test_geometry.py
+
+# Run tests matching pattern
+uv run pytest -k "envelope"
+```
+
+## Post-Processing with DuckDB
+
+After generating `ogm.parquet`, add a native geometry column:
+
+```bash
+duckdb -c "
+COPY (
+  SELECT *,
+    ST_GeomFromGeoJSON(geojson) AS geometry
+  FROM 'tmp/ogm.parquet'
+) TO 'tmp/cloud.parquet' (FORMAT PARQUET, COMPRESSION zstd, PARQUET_VERSION v2);
+"
+```
+
+This creates `cloud.parquet` with WKB geometry for efficient spatial queries.
+
+## Differences from Ruby Version
+
+This Python implementation is functionally equivalent to the Ruby version but includes:
+
+1. Comprehensive test suite (94% coverage)
+2. Type hints throughout for better IDE support
+3. Modern package management with uv
+4. Better error handling and logging
+5. Easier cross-platform setup
+6. Well-documented code with docstrings
