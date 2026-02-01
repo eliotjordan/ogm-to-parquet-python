@@ -11,8 +11,6 @@ from typing import Any, Dict, List, Optional
 
 import pyarrow as pa
 import pyarrow.parquet as pq
-from shapely import wkb
-from shapely.geometry import shape
 
 from .geometry import Geometry
 
@@ -62,7 +60,6 @@ PARQUET_SCHEMA = pa.schema(
         ("theme", pa.list_(pa.string())),
         ("thumbnail", pa.string()),
         ("geojson", pa.string()),
-        ("geometry", pa.binary()),  # WKB geometry
         ("description", pa.string()),
         ("format", pa.string()),
         ("identifier", pa.list_(pa.string())),
@@ -227,7 +224,6 @@ class OgmToParquet:
         Returns:
             Dictionary with fields matching PARQUET_SCHEMA
         """
-        # Extract GeoJSON first so we can use it for both geojson and geometry fields
         geojson = self._extract_geojson(doc)
 
         return {
@@ -244,7 +240,6 @@ class OgmToParquet:
             "theme": self._ensure_list(doc.get("theme")),
             "thumbnail": self._extract_thumbnail_url(doc),
             "geojson": geojson,
-            "geometry": self._extract_geometry_wkb(geojson),
             "description": self._ensure_string(doc.get("description")),
             "format": self._ensure_string(doc.get("format")),
             "identifier": self._ensure_list(doc.get("identifier")),
@@ -344,31 +339,6 @@ class OgmToParquet:
         if not bbox:
             return None
         return Geometry(bbox).to_geojson()
-
-    def _extract_geometry_wkb(self, geojson_str: Optional[str]) -> Optional[bytes]:
-        """Convert GeoJSON string to WKB (Well-Known Binary) geometry.
-
-        Args:
-            geojson_str: GeoJSON string
-
-        Returns:
-            WKB bytes or None
-        """
-        if not geojson_str:
-            return None
-
-        try:
-            # Parse GeoJSON string to dict
-            geojson_dict = json.loads(geojson_str)
-
-            # Convert to Shapely geometry
-            geom = shape(geojson_dict)
-
-            # Convert to WKB (Well-Known Binary)
-            return wkb.dumps(geom)
-        except Exception as e:
-            logger.debug(f"Error converting GeoJSON to WKB: {e}")
-            return None
 
     def _extract_thumbnail_url(self, doc: Dict[str, Any]) -> Optional[str]:
         """Extract thumbnail URL from references field.
