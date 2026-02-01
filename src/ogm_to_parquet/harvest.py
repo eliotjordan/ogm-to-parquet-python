@@ -13,6 +13,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from .geometry import Geometry
+from .embeddings import VocabularyBuilder, distill_model, EmbeddingGenerator
 
 # Configure logging
 logging.basicConfig(
@@ -69,6 +70,7 @@ PARQUET_SCHEMA = pa.schema(
         ("modified", pa.string()),
         ("index_year", pa.list_(pa.float64())),
         ("full_text", pa.string()),
+        ("embeddings", pa.list_(pa.float32())),
     ]
 )
 
@@ -80,21 +82,38 @@ class OgmToParquet:
         self,
         ogm_path: str = "./tmp/opengeometadata/",
         output_path: str = "./tmp/ogm.parquet",
+        model_dir: str = "./tmp/ogm-model/",
+        enable_embeddings: bool = True,
     ):
         """Initialize the harvester.
 
         Args:
             ogm_path: Path to directory containing OpenGeoMetadata JSON files
             output_path: Path for output Parquet file
+            model_dir: Directory to save distilled embedding model
+            enable_embeddings: Whether to generate embeddings (requires model2vec)
         """
         self.ogm_path = Path(ogm_path)
         self.output_path = Path(output_path)
+        self.model_dir = Path(model_dir)
+        self.enable_embeddings = enable_embeddings
         self.rows: List[Dict[str, Any]] = []
+        self.embedding_generator: Optional[EmbeddingGenerator] = None
 
     def convert(self) -> None:
-        """Convert all JSON files to Parquet format."""
+        """Convert all JSON files to Parquet format with embeddings."""
         docs = self._collect_documents()
 
+        # Build vocabulary and distill model before processing documents
+        if self.enable_embeddings:
+            try:
+                self._prepare_embedding_model(docs)
+            except Exception as e:
+                logger.error(f"Failed to prepare embedding model: {e}")
+                logger.warning("Continuing without embeddings")
+                self.enable_embeddings = False
+
+        # Process each document
         for doc in docs:
             try:
                 # Skip non-dict documents
@@ -114,6 +133,40 @@ class OgmToParquet:
 
         self._write_parquet()
         logger.info(f"Successfully wrote {len(self.rows)} records to {self.output_path}")
+
+    def _prepare_embedding_model(self, docs: List[Dict[str, Any]]) -> None:
+        """Build vocabulary, distill model, and create embedding generator.
+
+        Args:
+            docs: All documents to process (needed for vocabulary building)
+        """
+        logger.info("Preparing embedding model...")
+
+        # Remap all documents for vocabulary building
+        remapped_docs = []
+        for doc in docs:
+            if isinstance(doc, dict):
+                remapped_docs.append(self._remap_and_clean(doc))
+
+        # Build vocabulary from all documents
+        vocab_builder = VocabularyBuilder(
+            max_vocab_size=10000,
+            min_term_freq=2,
+            include_bigrams=True,
+        )
+        vocabulary = vocab_builder.build_vocabulary(remapped_docs)
+
+        # Distill model with custom vocabulary
+        model_path = distill_model(
+            vocabulary=vocabulary,
+            output_dir=str(self.model_dir),
+            base_model="sentence-transformers/all-MiniLM-L6-v2",
+            pca_dims=256,
+        )
+
+        # Create embedding generator
+        self.embedding_generator = EmbeddingGenerator(str(model_path))
+        logger.info("Embedding model ready")
 
     def _collect_documents(self) -> List[Dict[str, Any]]:
         """Recursively collect all JSON documents from ogm_path.
@@ -226,6 +279,14 @@ class OgmToParquet:
         """
         geojson = self._extract_geojson(doc)
 
+        # Generate embedding if available
+        embeddings = None
+        if self.embedding_generator is not None:
+            embeddings = self.embedding_generator.generate_embedding(doc)
+            if embeddings is None:
+                doc_id = doc.get("id", "unknown")
+                logger.warning(f"Failed to generate embedding for document {doc_id}")
+
         return {
             "id": self._ensure_string(doc.get("id")),
             "title": self._ensure_string(doc.get("title")),
@@ -249,6 +310,7 @@ class OgmToParquet:
             "modified": self._ensure_string(doc.get("modified")),
             "index_year": self._ensure_float_list(doc.get("index_year")),
             "full_text": None,  # Not populated in Ruby version either
+            "embeddings": embeddings,
         }
 
     def _ensure_list(self, value: Any) -> Optional[List[Any]]:
