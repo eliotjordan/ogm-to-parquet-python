@@ -293,6 +293,7 @@ class TestDistillModel:
 
         # Check that expected files exist
         assert (model_path / "model.safetensors").exists()
+        assert (model_path / "model_f32.safetensors").exists()
         assert (model_path / "tokenizer.json").exists()
         assert (model_path / "embeddings.bin").exists()
         assert (model_path / "metadata.json").exists()
@@ -320,6 +321,7 @@ class TestDistillModel:
 
         assert model_path.exists()
         assert (model_path / "model.safetensors").exists()
+        assert (model_path / "model_f32.safetensors").exists()
 
 
 class TestEmbeddingIntegration:

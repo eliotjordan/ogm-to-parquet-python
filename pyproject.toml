@@ -12,6 +12,7 @@ dependencies = [
 
 [project.scripts]
 ogm-harvest = "ogm_to_parquet.harvest:main"
+ogm-convert-safetensors = "ogm_to_parquet.convert_safetensors:main"
 
 [project.optional-dependencies]
 dev = [
