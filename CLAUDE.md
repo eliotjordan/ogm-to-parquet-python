@@ -41,6 +41,15 @@ uv run pytest -k "envelope"
 
 # Run distillation tests (requires --extra distill)
 uv run pytest tests/test_embeddings.py -k "distill"
+
+# Lint code with ruff
+uv run ruff check src tests
+
+# Format code with ruff
+uv run ruff format src tests
+
+# Check formatting without making changes
+uv run ruff format --check src tests
 ```
 
 ## Architecture
@@ -164,6 +173,49 @@ Coverage thresholds defined in `pyproject.toml`:
 - Excludes: `tests/*`, pragma comments, `__repr__`, `__main__`
 - Reports: terminal + HTML
 
+## Linting
+
+The project uses [Ruff](https://docs.astral.sh/ruff/) for linting and formatting.
+
+**Configuration** (in `pyproject.toml`):
+- Line length: 100 characters
+- Target: Python 3.11+
+- Enabled rules: pycodestyle, pyflakes, isort, flake8-bugbear, flake8-comprehensions, pyupgrade
+- Auto-formatting with double quotes and spaces
+
+**Commands**:
+```bash
+# Check linting
+uv run ruff check src tests
+
+# Auto-fix linting issues
+uv run ruff check --fix src tests
+
+# Check formatting
+uv run ruff format --check src tests
+
+# Apply formatting
+uv run ruff format src tests
+```
+
+## CI/CD
+
+GitHub Actions workflow (`.github/workflows/ci.yml`) runs on push to main and pull requests:
+
+**Lint Job**:
+- Runs ruff linter and formatter checks
+- Python 3.11 on Ubuntu
+
+**Test Job**:
+- Runs full test suite with coverage on Python 3.11 and 3.12
+- Includes distillation tests (with torch/sentence-transformers)
+- Uploads coverage to Codecov
+
+**Test-No-Distill Job**:
+- Verifies tests work without optional distillation dependencies
+- Ensures core functionality doesn't require torch
+- Distillation tests are automatically skipped
+
 ## Adding New Fields
 
 1. Add mapping to `FIELD_MAP` in harvest.py (line 24)
@@ -257,9 +309,10 @@ harvester.convert()
 - `geojson>=3.0.0` - GeoJSON validation
 - `model2vec>=0.3.0` - Static embedding model generation
 
-**Dev** (pyproject.toml:16-18):
+**Dev** (pyproject.toml:17-21):
 - `pytest>=8.0.0` - Testing framework
 - `pytest-cov>=6.0.0` - Coverage reporting
+- `ruff>=0.8.0` - Linting and formatting
 
 **Distill** (optional, pyproject.toml:20-23):
 - `torch>=2.0.0` - PyTorch for model distillation

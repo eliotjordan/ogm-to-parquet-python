@@ -8,11 +8,9 @@ https://github.com/geoblacklight/geoblacklight/blob/main/lib/geoblacklight/geome
 import json
 import logging
 import re
-from typing import Optional
 
-import geojson
 from shapely import wkt
-from shapely.geometry import box, mapping, shape
+from shapely.geometry import mapping
 
 logger = logging.getLogger(__name__)
 
@@ -92,14 +90,18 @@ class Geometry:
             ValueError: If ENVELOPE format is invalid
         """
         # Pattern matches ENVELOPE(minx, maxx, maxy, miny)
-        pattern = r"^\s*ENVELOPE\(\s*([-.\d]+)\s*,\s*([-.\d]+)\s*,\s*([-.\d]+)\s*,\s*([-.\d]+)\s*\)\s*$"
+        pattern = (
+            r"^\s*ENVELOPE\(\s*([-.\d]+)\s*,\s*([-.\d]+)\s*,\s*([-.\d]+)\s*,\s*([-.\d]+)\s*\)\s*$"
+        )
         match = re.match(pattern, self.geom, re.IGNORECASE | re.VERBOSE)
 
         if not match:
             raise ValueError(f"Invalid ENVELOPE format: {self.geom}")
 
         minx, maxx, maxy, miny = match.groups()
-        return f"POLYGON (({minx} {maxy}, {minx} {miny}, {maxx} {miny}, {maxx} {maxy}, {minx} {maxy}))"
+        return (
+            f"POLYGON (({minx} {maxy}, {minx} {miny}, {maxx} {miny}, {maxx} {maxy}, {minx} {maxy}))"
+        )
 
     def _geometry_as_wkt(self) -> str:
         """Return geometry as valid WKT string.

@@ -92,7 +92,20 @@ uv run pytest --cov
 
 # Run specific test file
 uv run pytest tests/test_geometry.py
+
+# Lint code
+uv run ruff check src tests
+
+# Format code
+uv run ruff format src tests
 ```
+
+### Continuous Integration
+
+The project uses GitHub Actions for CI:
+- **Linting**: Runs ruff linter and formatter checks
+- **Testing**: Runs full test suite on Python 3.11 and 3.12 with coverage
+- **Compatibility**: Verifies tests work without optional distillation dependencies
 
 ## Project Structure
 

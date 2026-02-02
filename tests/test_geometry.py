@@ -2,8 +2,6 @@
 
 import json
 
-import pytest
-
 from ogm_to_parquet.geometry import Geometry
 
 
