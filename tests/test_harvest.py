@@ -260,7 +260,8 @@ class TestOgmToParquet:
         assert row["resource_class"] == ["Maps"]
         assert row["thumbnail"] == "https://example.com/thumb.jpg"
         assert row["geojson"] is not None
-        assert "full_text" in row
+        # Verify embeddings field exists (may be None if embeddings disabled)
+        assert "embeddings" in row
 
     def test_collect_documents_empty_directory(self, harvester):
         """Test collecting documents from empty directory."""

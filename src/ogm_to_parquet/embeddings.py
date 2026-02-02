@@ -405,24 +405,6 @@ def distill_model(
         logger.info(f"Embedding matrix saved to {binary_path}")
         logger.info(f"Shape: {embeddings_array.shape}")
 
-        # Convert model.safetensors to F32 for better compatibility
-        # (some WASM/JS environments don't support F16)
-        try:
-            from .convert_safetensors import convert_f16_to_f32
-
-            model_safetensors = output_path / "model.safetensors"
-            model_f32_safetensors = output_path / "model_f32.safetensors"
-
-            if model_safetensors.exists():
-                logger.info("Creating F32 version of model for broader compatibility...")
-                stats = convert_f16_to_f32(model_safetensors, model_f32_safetensors)
-                logger.info(
-                    f"F32 model saved: {stats['converted']} tensors converted, "
-                    f"{stats['unchanged']} unchanged"
-                )
-        except Exception as e:
-            logger.warning(f"Failed to create F32 model (non-fatal): {e}")
-
         return output_path
 
     except ImportError:

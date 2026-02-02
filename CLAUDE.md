@@ -51,7 +51,7 @@ uv run pytest tests/test_embeddings.py -k "distill"
 - `VocabularyBuilder` extracts vocabulary from controlled vocab and free-text fields
 - `distill_model()` distills all-MiniLM-L6-v2 with custom vocabulary for browser use
 - `EmbeddingGenerator` generates document embeddings using the distilled model
-- Outputs tokenizer.json, model.safetensors, model_f32.safetensors, embeddings.bin, and metadata.json
+- Outputs tokenizer.json, model.safetensors, embeddings.bin, and metadata.json
 
 **src/ogm_to_parquet/harvest.py** - Main harvester orchestration:
 - `OgmToParquet` class manages the entire conversion pipeline
@@ -76,7 +76,7 @@ uv run pytest tests/test_embeddings.py -k "distill"
    - Bigrams included for domain-specific phrases
 3. **Model Distillation**: Distill all-MiniLM-L6-v2 with custom vocabulary
    - PCA reduction to 256 dimensions for small file size
-   - Outputs saved to `tmp/ogm-model/` (tokenizer.json, model.safetensors, model_f32.safetensors, embeddings.bin)
+   - Outputs saved to `tmp/ogm-model/` (tokenizer.json, model.safetensors, embeddings.bin, metadata.json)
    - Metadata saved for browser loading
 4. **Document Processing**: For each document:
    - **Remapping** (`_remap_doc_keys`): Apply `FIELD_MAP` to convert GeoBlacklight field names
@@ -128,13 +128,12 @@ Parses `dct_references_s` JSON field (harvest.py:343-373):
 
 ## Testing Strategy
 
-**83 tests total** with extensive coverage:
+**74 tests total** with extensive coverage:
 - **test_geometry.py**: 14 tests for WKT/ENVELOPE parsing, GeoJSON conversion, bbox extraction
 - **test_harvest.py**: 42 tests for field mapping, data cleaning, thumbnail extraction, type coercion
 - **test_embeddings.py**: 18 tests for vocabulary building, embedding generation, model distillation
   - 14 tests always run (vocabulary building, tokenization logic)
   - 4 tests require torch/sentence-transformers (marked with `@requires_distill`, skipped unless `uv sync --extra distill`)
-- **test_convert_safetensors.py**: 9 tests for F16 to F32 safetensors conversion
 
 ### Running Specific Tests
 
@@ -217,8 +216,7 @@ Uses Model2Vec to distill `sentence-transformers/all-MiniLM-L6-v2`:
 - Configurable vocabulary size (1K to 10K+ terms)
 - Output files saved to `tmp/ogm-model/`:
   - `tokenizer.json` - HuggingFace tokenizer (for browser use)
-  - `model.safetensors` - Model weights in safetensors format (may be F16)
-  - `model_f32.safetensors` - Model weights in F32 format (for broader compatibility)
+  - `model.safetensors` - Model weights in safetensors format
   - `embeddings.bin` - Raw float32 binary (easier to load in browser)
   - `metadata.json` - Vocab size, embedding dims, base model info
 
@@ -237,11 +235,9 @@ For smaller models (vocab < 10K), controlled vocabulary is limited to most frequ
 
 The distilled model can be loaded in JavaScript/WASM:
 1. Load `tokenizer.json` using HuggingFace tokenizers.js
-2. Load `embeddings.bin` as Float32Array (or use `model_f32.safetensors` if your environment doesn't support F16)
+2. Load `embeddings.bin` as Float32Array
 3. Tokenize query text, lookup embeddings, average vectors
 4. No neural network required - just tokenization and vector arithmetic
-
-Both `model.safetensors` and `model_f32.safetensors` are generated automatically. Use the F32 version for maximum compatibility with WASM/JS environments.
 
 See embeddings.py docstring for implementation details.
 
