@@ -500,15 +500,15 @@ def main():
     parser.add_argument(
         "--embedding-dims",
         type=int,
-        default=256,
+        default=128,
         choices=[32, 64, 128, 256],
-        help="Embedding dimensions (lower = smaller model). Default: 256",
+        help="Embedding dimensions (lower = smaller model). Default: 128",
     )
     parser.add_argument(
         "--max-vocab-size",
         type=int,
         default=5000,
-        help="Maximum vocabulary size (lower = smaller model). Default: 5000",
+        help="Maximum vocabulary size (lower = smaller model). Default: 10000",
     )
     parser.add_argument(
         "--no-embeddings",

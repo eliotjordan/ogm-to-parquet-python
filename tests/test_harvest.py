@@ -437,9 +437,7 @@ class TestOgmToParquet:
         ogm_path.mkdir()
 
         # Create document with wrong version
-        (ogm_path / "old.json").write_text(
-            json.dumps({"id": "old-123", "gbl_mdVersion_s": "1.0"})
-        )
+        (ogm_path / "old.json").write_text(json.dumps({"id": "old-123", "gbl_mdVersion_s": "1.0"}))
 
         # Create document with missing version
         (ogm_path / "missing.json").write_text(json.dumps({"id": "missing-123"}))
