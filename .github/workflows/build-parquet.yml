@@ -43,3 +43,17 @@ jobs:
           name: cloud-parquet
           path: tmp/cloud.parquet
           retention-days: 1
+
+      - name: Upload embeddings artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: embeddings
+          path: tmp/ogm-model/embeddings.bin
+          retention-days: 1
+
+      - name: Upload tokenizer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tokenizer
+          path: tmp/ogm-model/tokenizer.json
+          retention-days: 1
