@@ -1,28 +1,25 @@
 """Tests for embeddings module."""
 
 import json
-import tempfile
-from pathlib import Path
+
+# Check if distillation dependencies are available
+from importlib.util import find_spec
 
 import pytest
 
 from ogm_to_parquet.embeddings import (
-    VocabularyBuilder,
     EmbeddingGenerator,
+    VocabularyBuilder,
     distill_model,
 )
 
-# Check if distillation dependencies are available
-try:
-    import torch
-    import sentence_transformers
-    DISTILL_AVAILABLE = True
-except ImportError:
-    DISTILL_AVAILABLE = False
+DISTILL_AVAILABLE = (
+    find_spec("torch") is not None and find_spec("sentence_transformers") is not None
+)
 
 requires_distill = pytest.mark.skipif(
     not DISTILL_AVAILABLE,
-    reason="Requires torch and sentence-transformers (install with: uv sync --extra distill)"
+    reason="Requires torch and sentence-transformers (install with: uv sync --extra distill)",
 )
 
 
@@ -106,8 +103,14 @@ class TestVocabularyBuilder:
         """Test extraction of terms from free-text fields."""
         builder = VocabularyBuilder(max_vocab_size=100, min_term_freq=2)
         docs = [
-            {"title": "Map of California water resources", "description": "Detailed map showing water resources"},
-            {"title": "Water quality data for California", "description": "Dataset with water quality measurements"},
+            {
+                "title": "Map of California water resources",
+                "description": "Detailed map showing water resources",
+            },
+            {
+                "title": "Water quality data for California",
+                "description": "Dataset with water quality measurements",
+            },
             {"title": "California geology map", "description": "Geological features of California"},
         ]
 
@@ -136,18 +139,14 @@ class TestVocabularyBuilder:
         terms = builder._extract_free_text_terms(docs)
 
         assert "common" in terms  # Appears 3 times
-        assert "word" in terms    # Appears 3 times
-        assert "appears" in terms # Appears 3 times
+        assert "word" in terms  # Appears 3 times
+        assert "appears" in terms  # Appears 3 times
         assert "rare" not in terms  # Only appears once
         assert "term" not in terms  # Only appears once
 
     def test_extract_free_text_terms_bigrams(self):
         """Test extraction of bigrams from free-text."""
-        builder = VocabularyBuilder(
-            max_vocab_size=100,
-            min_term_freq=2,
-            include_bigrams=True
-        )
+        builder = VocabularyBuilder(max_vocab_size=100, min_term_freq=2, include_bigrams=True)
         docs = [
             {"title": "water quality monitoring", "description": "water quality data"},
             {"title": "air quality monitoring", "description": "air quality standards"},
@@ -163,11 +162,7 @@ class TestVocabularyBuilder:
 
     def test_extract_free_text_terms_no_bigrams(self):
         """Test that bigrams are excluded when disabled."""
-        builder = VocabularyBuilder(
-            max_vocab_size=100,
-            min_term_freq=1,
-            include_bigrams=False
-        )
+        builder = VocabularyBuilder(max_vocab_size=100, min_term_freq=1, include_bigrams=False)
         docs = [
             {"title": "water quality monitoring"},
         ]

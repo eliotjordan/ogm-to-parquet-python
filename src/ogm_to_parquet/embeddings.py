@@ -10,7 +10,7 @@ import logging
 import re
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 import numpy as np
 
@@ -37,11 +37,54 @@ FREE_TEXT_FIELDS = [
 
 # Simple stopwords for term extraction (extend as needed)
 STOPWORDS = {
-    "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
-    "of", "with", "by", "from", "as", "is", "was", "are", "were", "be",
-    "been", "being", "have", "has", "had", "do", "does", "did", "will",
-    "would", "should", "could", "may", "might", "must", "can", "this",
-    "that", "these", "those", "i", "you", "he", "she", "it", "we", "they",
+    "the",
+    "a",
+    "an",
+    "and",
+    "or",
+    "but",
+    "in",
+    "on",
+    "at",
+    "to",
+    "for",
+    "of",
+    "with",
+    "by",
+    "from",
+    "as",
+    "is",
+    "was",
+    "are",
+    "were",
+    "be",
+    "been",
+    "being",
+    "have",
+    "has",
+    "had",
+    "do",
+    "does",
+    "did",
+    "will",
+    "would",
+    "should",
+    "could",
+    "may",
+    "might",
+    "must",
+    "can",
+    "this",
+    "that",
+    "these",
+    "those",
+    "i",
+    "you",
+    "he",
+    "she",
+    "it",
+    "we",
+    "they",
 }
 
 
@@ -68,9 +111,9 @@ class VocabularyBuilder:
         self.min_term_freq = min_term_freq
         self.include_bigrams = include_bigrams
         self.limit_controlled_vocab = limit_controlled_vocab
-        self.vocab: Set[str] = set()
+        self.vocab: set[str] = set()
 
-    def build_vocabulary(self, documents: List[Dict[str, Any]]) -> List[str]:
+    def build_vocabulary(self, documents: list[dict[str, Any]]) -> list[str]:
         """Build vocabulary from all documents.
 
         Args:
@@ -91,14 +134,12 @@ class VocabularyBuilder:
 
         # Combine and deduplicate
         self.vocab = controlled_terms | free_text_terms
-        vocab_list = sorted(list(self.vocab))
+        vocab_list = sorted(self.vocab)
 
         logger.info(f"Final vocabulary size: {len(vocab_list)} terms")
         return vocab_list
 
-    def _extract_controlled_vocab(
-        self, documents: List[Dict[str, Any]]
-    ) -> Set[str]:
+    def _extract_controlled_vocab(self, documents: list[dict[str, Any]]) -> set[str]:
         """Extract all unique values from controlled vocabulary fields.
 
         Args:
@@ -126,16 +167,11 @@ class VocabularyBuilder:
                         term_counts[value.strip().lower()] += 1
 
             # Keep only top terms that appear at least min_term_freq times
-            terms = {
-                term for term, count in term_counts.items()
-                if count >= self.min_term_freq
-            }
+            terms = {term for term, count in term_counts.items() if count >= self.min_term_freq}
 
             # Limit to max_vocab_size // 2 to leave room for free-text terms
             if len(terms) > self.max_vocab_size // 2:
-                top_terms = [
-                    term for term, _ in term_counts.most_common(self.max_vocab_size // 2)
-                ]
+                top_terms = [term for term, _ in term_counts.most_common(self.max_vocab_size // 2)]
                 terms = set(top_terms)
 
             return terms
@@ -159,9 +195,7 @@ class VocabularyBuilder:
 
             return terms
 
-    def _extract_free_text_terms(
-        self, documents: List[Dict[str, Any]]
-    ) -> Set[str]:
+    def _extract_free_text_terms(self, documents: list[dict[str, Any]]) -> set[str]:
         """Extract common terms from free-text fields.
 
         Uses frequency analysis to identify domain-specific terms.
@@ -210,30 +244,16 @@ class VocabularyBuilder:
                         bigrams[bigram] += 1
 
         # Filter by minimum frequency
-        unigrams = {
-            term: count
-            for term, count in unigrams.items()
-            if count >= self.min_term_freq
-        }
-        bigrams = {
-            term: count
-            for term, count in bigrams.items()
-            if count >= self.min_term_freq
-        }
+        unigrams = {term: count for term, count in unigrams.items() if count >= self.min_term_freq}
+        bigrams = {term: count for term, count in bigrams.items() if count >= self.min_term_freq}
 
         # Take top N most common terms
-        top_unigrams = [
-            term for term, _ in Counter(unigrams).most_common(self.max_vocab_size)
-        ]
-        top_bigrams = [
-            term
-            for term, _
-            in Counter(bigrams).most_common(self.max_vocab_size // 2)
-        ]
+        top_unigrams = [term for term, _ in Counter(unigrams).most_common(self.max_vocab_size)]
+        top_bigrams = [term for term, _ in Counter(bigrams).most_common(self.max_vocab_size // 2)]
 
         return set(top_unigrams + top_bigrams)
 
-    def _tokenize(self, text: str) -> List[str]:
+    def _tokenize(self, text: str) -> list[str]:
         """Simple tokenization: lowercase, split on non-alphanumeric.
 
         Args:
@@ -244,7 +264,7 @@ class VocabularyBuilder:
         """
         text = text.lower()
         # Split on non-alphanumeric, keep tokens with letters
-        tokens = re.findall(r'\b[a-z0-9]+\b', text)
+        tokens = re.findall(r"\b[a-z0-9]+\b", text)
         return tokens
 
 
@@ -272,7 +292,7 @@ class EmbeddingGenerator:
             logger.error(f"Failed to load model: {e}")
             raise
 
-    def generate_embedding(self, doc: Dict[str, Any]) -> Optional[List[float]]:
+    def generate_embedding(self, doc: dict[str, Any]) -> list[float] | None:
         """Generate embedding for a single document.
 
         Combines multiple metadata fields into a single text representation,
@@ -302,7 +322,7 @@ class EmbeddingGenerator:
             logger.warning(f"Error generating embedding: {e}")
             return None
 
-    def _doc_to_text(self, doc: Dict[str, Any]) -> str:
+    def _doc_to_text(self, doc: dict[str, Any]) -> str:
         """Convert document to text representation for embedding.
 
         Args:
@@ -350,7 +370,7 @@ class EmbeddingGenerator:
 
 
 def distill_model(
-    vocabulary: List[str],
+    vocabulary: list[str],
     output_dir: str,
     base_model: str = "sentence-transformers/all-MiniLM-L6-v2",
     pca_dims: int = 256,

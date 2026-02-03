@@ -7,13 +7,13 @@ optimized for querying with DuckDB-WASM.
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from .embeddings import EmbeddingGenerator, VocabularyBuilder, distill_model
 from .geometry import Geometry
-from .embeddings import VocabularyBuilder, distill_model, EmbeddingGenerator
 
 # Configure logging
 logging.basicConfig(
@@ -104,8 +104,8 @@ class OgmToParquet:
         self.enable_embeddings = enable_embeddings
         self.embedding_dims = embedding_dims
         self.max_vocab_size = max_vocab_size
-        self.rows: List[Dict[str, Any]] = []
-        self.embedding_generator: Optional[EmbeddingGenerator] = None
+        self.rows: list[dict[str, Any]] = []
+        self.embedding_generator: EmbeddingGenerator | None = None
 
     def convert(self) -> None:
         """Convert all JSON files to Parquet format with embeddings."""
@@ -141,7 +141,7 @@ class OgmToParquet:
         self._write_parquet()
         logger.info(f"Successfully wrote {len(self.rows)} records to {self.output_path}")
 
-    def _prepare_embedding_model(self, docs: List[Dict[str, Any]]) -> None:
+    def _prepare_embedding_model(self, docs: list[dict[str, Any]]) -> None:
         """Build vocabulary, distill model, and create embedding generator.
 
         Args:
@@ -161,7 +161,8 @@ class OgmToParquet:
             max_vocab_size=self.max_vocab_size,
             min_term_freq=2,
             include_bigrams=self.embedding_dims >= 128,  # Skip bigrams for very small models
-            limit_controlled_vocab=self.max_vocab_size < 10000,  # Limit controlled vocab for small models
+            limit_controlled_vocab=self.max_vocab_size
+            < 10000,  # Limit controlled vocab for small models
         )
         vocabulary = vocab_builder.build_vocabulary(remapped_docs)
 
@@ -177,7 +178,7 @@ class OgmToParquet:
         self.embedding_generator = EmbeddingGenerator(str(model_path))
         logger.info("Embedding model ready")
 
-    def _collect_documents(self) -> List[Dict[str, Any]]:
+    def _collect_documents(self) -> list[dict[str, Any]]:
         """Recursively collect all JSON documents from ogm_path.
 
         Returns:
@@ -195,7 +196,7 @@ class OgmToParquet:
 
         for json_file in json_files:
             try:
-                with open(json_file, "r", encoding="utf-8") as f:
+                with open(json_file, encoding="utf-8") as f:
                     doc = json.load(f)
                     # Only collect dict documents (skip strings, lists, etc.)
                     if isinstance(doc, dict):
@@ -208,7 +209,7 @@ class OgmToParquet:
 
         return documents
 
-    def _remap_and_clean(self, doc: Dict[str, Any]) -> Dict[str, Any]:
+    def _remap_and_clean(self, doc: dict[str, Any]) -> dict[str, Any]:
         """Remap field names and clean values.
 
         Args:
@@ -220,7 +221,7 @@ class OgmToParquet:
         remapped = self._remap_doc_keys(doc)
         return self._clean_values(remapped)
 
-    def _remap_doc_keys(self, doc: Dict[str, Any]) -> Dict[str, Any]:
+    def _remap_doc_keys(self, doc: dict[str, Any]) -> dict[str, Any]:
         """Remap document keys using FIELD_MAP.
 
         Args:
@@ -235,7 +236,7 @@ class OgmToParquet:
             remapped[new_key] = value
         return remapped
 
-    def _clean_values(self, doc: Dict[str, Any]) -> Dict[str, Any]:
+    def _clean_values(self, doc: dict[str, Any]) -> dict[str, Any]:
         """Clean values by removing single quotes (prevents SQL injection).
 
         Preserves numeric types (int, float) to maintain schema compatibility.
@@ -257,7 +258,7 @@ class OgmToParquet:
                 cleaned[key] = value
         return cleaned
 
-    def _clean_array(self, arr: List[Any]) -> List[Any]:
+    def _clean_array(self, arr: list[Any]) -> list[Any]:
         """Clean array values by removing single quotes from strings.
 
         Preserves numeric types (int, float) in arrays.
@@ -277,7 +278,7 @@ class OgmToParquet:
                 cleaned.append(item)
         return cleaned
 
-    def _build_row(self, doc: Dict[str, Any]) -> Dict[str, Any]:
+    def _build_row(self, doc: dict[str, Any]) -> dict[str, Any]:
         """Build a row for Parquet output.
 
         Args:
@@ -321,7 +322,7 @@ class OgmToParquet:
             "embeddings": embeddings,
         }
 
-    def _ensure_list(self, value: Any) -> Optional[List[Any]]:
+    def _ensure_list(self, value: Any) -> list[Any] | None:
         """Ensure value is a list or None.
 
         Args:
@@ -336,7 +337,7 @@ class OgmToParquet:
             return value if value else None
         return [value]
 
-    def _ensure_float_list(self, value: Any) -> Optional[List[float]]:
+    def _ensure_float_list(self, value: Any) -> list[float] | None:
         """Ensure value is a list of floats or None.
 
         Converts strings to floats where possible.
@@ -375,7 +376,7 @@ class OgmToParquet:
 
         return float_list if float_list else None
 
-    def _ensure_string(self, value: Any) -> Optional[str]:
+    def _ensure_string(self, value: Any) -> str | None:
         """Ensure value is a string or None.
 
         If value is a list, join elements with a space.
@@ -396,7 +397,7 @@ class OgmToParquet:
             return " ".join(str(item) for item in value if item is not None) if value else None
         return str(value)
 
-    def _extract_geojson(self, doc: Dict[str, Any]) -> Optional[str]:
+    def _extract_geojson(self, doc: dict[str, Any]) -> str | None:
         """Extract GeoJSON from bbox field.
 
         Args:
@@ -410,7 +411,7 @@ class OgmToParquet:
             return None
         return Geometry(bbox).to_geojson()
 
-    def _extract_thumbnail_url(self, doc: Dict[str, Any]) -> Optional[str]:
+    def _extract_thumbnail_url(self, doc: dict[str, Any]) -> str | None:
         """Extract thumbnail URL from references field.
 
         Prefers schema.org thumbnailUrl, falls back to IIIF image API.
