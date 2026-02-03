@@ -671,6 +671,7 @@ dependencies = [
     { name = "geojson" },
     { name = "model2vec" },
     { name = "pyarrow" },
+    { name = "pyyaml" },
     { name = "shapely" },
 ]
 
@@ -692,6 +693,7 @@ requires-dist = [
     { name = "pyarrow", specifier = ">=18.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.0.0" },
+    { name = "pyyaml", specifier = ">=6.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8.0" },
     { name = "sentence-transformers", marker = "extra == 'distill'", specifier = ">=2.2.0" },
     { name = "shapely", specifier = ">=2.0.0" },

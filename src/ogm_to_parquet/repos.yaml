@@ -1,0 +1,20 @@
+# OpenGeoMetadata repositories to harvest
+# Each entry should be the repository name under https://github.com/OpenGeoMetadata/
+repositories:
+  - edu.berkeley
+  - edu.illinois
+  - edu.indiana
+  - edu.msu
+  - edu.northwestern
+  - edu.nyu
+  - edu.osu
+  - edu.psu
+  - edu.purdue
+  - edu.rutgers
+  - edu.stanford.purl
+  - edu.uiowa
+  - edu.umd
+  - edu.umich
+  - edu.umn
+  - edu.unl
+  - edu.utexas

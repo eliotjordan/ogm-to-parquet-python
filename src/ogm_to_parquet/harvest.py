@@ -12,6 +12,7 @@ from typing import Any
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from .download import download_repositories
 from .embeddings import EmbeddingGenerator, VocabularyBuilder, distill_model
 from .geometry import Geometry
 
@@ -490,10 +491,50 @@ def main():
         action="store_true",
         help="Disable embedding generation",
     )
+    parser.add_argument(
+        "--download",
+        action="store_true",
+        help="Download/update OpenGeoMetadata repositories before harvesting",
+    )
+    parser.add_argument(
+        "--download-only",
+        action="store_true",
+        help="Download/update repositories without harvesting (implies --download)",
+    )
+    parser.add_argument(
+        "--repos-config",
+        type=str,
+        default=None,
+        help="Path to YAML file with list of repositories to download (default: built-in repos.yaml)",
+    )
+    parser.add_argument(
+        "--ogm-path",
+        type=str,
+        default="./tmp/opengeometadata/",
+        help="Path to OpenGeoMetadata data directory (default: ./tmp/opengeometadata/)",
+    )
 
     args = parser.parse_args()
 
+    # Download repositories if requested (--download-only implies --download)
+    if args.download or args.download_only:
+        logger.info("Downloading OpenGeoMetadata repositories...")
+        results = download_repositories(
+            target_dir=args.ogm_path,
+            config_path=args.repos_config,
+        )
+        failed = [name for name, success in results.items() if not success]
+        if failed:
+            logger.warning(f"Failed to download/update: {', '.join(failed)}")
+
+        # Exit early if download-only mode
+        if args.download_only:
+            successful = sum(1 for v in results.values() if v)
+            logger.info(f"Download complete: {successful}/{len(results)} repositories")
+            return
+
     harvester = OgmToParquet(
+        ogm_path=args.ogm_path,
         enable_embeddings=not args.no_embeddings,
         embedding_dims=args.embedding_dims,
         max_vocab_size=args.max_vocab_size,

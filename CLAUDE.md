@@ -27,6 +27,18 @@ uv run ogm-harvest --embedding-dims 32 --max-vocab-size 1000
 # Run without embeddings
 uv run ogm-harvest --no-embeddings
 
+# Download OpenGeoMetadata repositories and harvest
+uv run ogm-harvest --download
+
+# Download using custom repos config
+uv run ogm-harvest --download --repos-config my-repos.yaml
+
+# Download to custom directory
+uv run ogm-harvest --download --ogm-path ./data/opengeometadata
+
+# Download only (skip harvesting)
+uv run ogm-harvest --download-only
+
 # Run tests
 uv run pytest
 
@@ -55,6 +67,13 @@ uv run ruff format --check src tests
 ## Architecture
 
 ### Core Components
+
+**src/ogm_to_parquet/download.py** - Repository download and update:
+- `load_repository_list()` loads repo list from YAML config file
+- `clone_repository()` creates shallow clones (`--depth 1`) for efficiency
+- `update_repository()` runs `git pull` on existing repos
+- `download_repositories()` orchestrates clone/update for all repos
+- Default repos defined in `repos.yaml` (18 institutions)
 
 **src/ogm_to_parquet/embeddings.py** - Embedding generation with Model2Vec:
 - `VocabularyBuilder` extracts vocabulary from controlled vocab and free-text fields
@@ -137,7 +156,8 @@ Parses `dct_references_s` JSON field (harvest.py:343-373):
 
 ## Testing Strategy
 
-**74 tests total** with extensive coverage:
+**96 tests total** with extensive coverage:
+- **test_download.py**: 22 tests for repository loading, cloning, updating, and config parsing
 - **test_geometry.py**: 14 tests for WKT/ENVELOPE parsing, GeoJSON conversion, bbox extraction
 - **test_harvest.py**: 42 tests for field mapping, data cleaning, thumbnail extraction, type coercion
 - **test_embeddings.py**: 18 tests for vocabulary building, embedding generation, model distillation
@@ -303,11 +323,12 @@ harvester.convert()
 
 ## Dependencies
 
-**Core** (pyproject.toml:6-10):
+**Core** (pyproject.toml:6-11):
 - `pyarrow>=18.0.0` - Parquet file writing
 - `shapely>=2.0.0` - Geometry transformations
 - `geojson>=3.0.0` - GeoJSON validation
 - `model2vec>=0.3.0` - Static embedding model generation
+- `pyyaml>=6.0.0` - YAML config file parsing for repository list
 
 **Dev** (pyproject.toml:17-21):
 - `pytest>=8.0.0` - Testing framework
