@@ -84,8 +84,8 @@ class OgmToParquet:
         output_path: str = "./tmp/ogm.parquet",
         model_dir: str = "./tmp/ogm-model/",
         enable_embeddings: bool = True,
-        embedding_dims: int = 256,
-        max_vocab_size: int = 5000,
+        embedding_dims: int = 128,
+        max_vocab_size: int = 10000,
     ):
         """Initialize the harvester.
 

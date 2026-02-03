@@ -21,7 +21,7 @@ uv sync --extra distill
 ## Usage
 
 ```bash
-# Run with default settings (256 dims, 5K vocab, ~15MB model)
+# Run with default settings (128 dims, 10K vocab, ~29MB model)
 uv run ogm-harvest
 
 # Generate a small model (~8 MB, good for web)
@@ -38,6 +38,22 @@ uv run ogm-harvest --no-embeddings
 
 # Or run the module directly
 uv run python -m ogm_to_parquet.harvest
+```
+
+### Downlaod OGM metadata
+
+```
+# Download OpenGeoMetadata repositories and harvest
+uv run ogm-harvest --download
+
+# Download using custom repos config
+uv run ogm-harvest --download --repos-config my-repos.yaml
+
+# Download to custom directory
+uv run ogm-harvest --download --ogm-path ./data/opengeometadata
+
+# Download only (skip harvesting)
+uv run ogm-harvest --download-only
 ```
 
 ### Embedding Generation
