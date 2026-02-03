@@ -37,23 +37,12 @@ jobs:
       - name: Run harvest
         run: ./harvest.sh
 
-      - name: Upload cloud.parquet artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload parquet file and embeddings to R2
+        uses: ryand56/r2-upload-action@latest
         with:
-          name: cloud-parquet
-          path: tmp/cloud.parquet
-          retention-days: 1
-
-      - name: Upload embeddings artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: embeddings
-          path: tmp/ogm-model/embeddings.bin
-          retention-days: 1
-
-      - name: Upload tokenizer artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: tokenizer
-          path: tmp/ogm-model/tokenizer.json
-          retention-days: 1
+          r2-account-id: ${{ secrets.R2_ACCOUNT_ID }}
+          r2-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
+          r2-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          r2-bucket: ${{ secrets.R2_BUCKET }}
+          source-dir: ./tmp/data
+          destination-dir: data
