@@ -282,7 +282,6 @@ class TestDefaultReposConfig:
 
         expected_repos = [
             "edu.berkeley",
-            "edu.harvard",
             "edu.illinois",
             "edu.indiana",
             "edu.msu",
