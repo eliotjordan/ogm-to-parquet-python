@@ -273,9 +273,9 @@ class TestOgmToParquet:
         ogm_path = tmp_path / "opengeometadata"
         ogm_path.mkdir(exist_ok=True)
 
-        # Create test JSON files
-        doc1 = {"id": "doc1", "dct_title_s": "Title 1"}
-        doc2 = {"id": "doc2", "dct_title_s": "Title 2"}
+        # Create test JSON files (must have id and gbl_mdVersion_s=Aardvark)
+        doc1 = {"id": "doc1", "gbl_mdVersion_s": "Aardvark", "dct_title_s": "Title 1"}
+        doc2 = {"id": "doc2", "gbl_mdVersion_s": "Aardvark", "dct_title_s": "Title 2"}
 
         (ogm_path / "doc1.json").write_text(json.dumps(doc1))
 
@@ -298,8 +298,10 @@ class TestOgmToParquet:
         # Create invalid JSON file
         (ogm_path / "invalid.json").write_text("{ invalid json")
 
-        # Create valid JSON file
-        (ogm_path / "valid.json").write_text(json.dumps({"id": "valid"}))
+        # Create valid JSON file (must have id and gbl_mdVersion_s=Aardvark)
+        (ogm_path / "valid.json").write_text(
+            json.dumps({"id": "valid", "gbl_mdVersion_s": "Aardvark"})
+        )
 
         harvester = OgmToParquet(str(ogm_path), str(tmp_path / "output.parquet"))
         docs = harvester._collect_documents()
@@ -314,9 +316,10 @@ class TestOgmToParquet:
         output_path = tmp_path / "output.parquet"
         ogm_path.mkdir()
 
-        # Create sample document
+        # Create sample document (must have id and gbl_mdVersion_s=Aardvark)
         doc = {
             "id": "test-123",
+            "gbl_mdVersion_s": "Aardvark",
             "dct_title_s": "Test Title",
             "schema_provider_s": "Test Provider",
             "gbl_resourceClass_sm": ["Maps"],
@@ -358,19 +361,24 @@ class TestOgmToParquet:
         output_path = tmp_path / "output.parquet"
         ogm_path.mkdir()
 
-        # Create document that will cause error (missing 'id')
-        bad_doc = {"dct_title_s": "No ID Document"}
+        # Create document that will be skipped (missing 'id')
+        bad_doc = {"gbl_mdVersion_s": "Aardvark", "dct_title_s": "No ID Document"}
         (ogm_path / "bad.json").write_text(json.dumps(bad_doc))
 
-        # Create valid document
-        good_doc = {"id": "good-123", "dct_title_s": "Good Document"}
+        # Create valid document (must have id and gbl_mdVersion_s=Aardvark)
+        good_doc = {
+            "id": "good-123",
+            "gbl_mdVersion_s": "Aardvark",
+            "dct_title_s": "Good Document",
+        }
         (ogm_path / "good.json").write_text(json.dumps(good_doc))
 
         harvester = OgmToParquet(str(ogm_path), str(output_path))
         harvester.convert()
 
-        # Should process valid document despite error with bad document
-        assert len(harvester.rows) >= 1
+        # Should process valid document, skipping document without id
+        assert len(harvester.rows) == 1
+        assert harvester.rows[0]["id"] == "good-123"
         assert output_path.exists()
 
     def test_collect_documents_skips_non_dict_json(self, tmp_path):
@@ -385,8 +393,10 @@ class TestOgmToParquet:
         # Create JSON file with array
         (ogm_path / "array.json").write_text(json.dumps([1, 2, 3]))
 
-        # Create valid dict document
-        (ogm_path / "valid.json").write_text(json.dumps({"id": "valid-123"}))
+        # Create valid dict document (must have id and gbl_mdVersion_s=Aardvark)
+        (ogm_path / "valid.json").write_text(
+            json.dumps({"id": "valid-123", "gbl_mdVersion_s": "Aardvark"})
+        )
 
         harvester = OgmToParquet(str(ogm_path), str(output_path))
         docs = harvester._collect_documents()
@@ -404,8 +414,12 @@ class TestOgmToParquet:
         # Create non-dict JSON
         (ogm_path / "string.json").write_text(json.dumps("string document"))
 
-        # Create valid document
-        valid_doc = {"id": "valid-123", "dct_title_s": "Valid Document"}
+        # Create valid document (must have id and gbl_mdVersion_s=Aardvark)
+        valid_doc = {
+            "id": "valid-123",
+            "gbl_mdVersion_s": "Aardvark",
+            "dct_title_s": "Valid Document",
+        }
         (ogm_path / "valid.json").write_text(json.dumps(valid_doc))
 
         harvester = OgmToParquet(str(ogm_path), str(output_path))
@@ -415,3 +429,57 @@ class TestOgmToParquet:
         assert len(harvester.rows) == 1
         assert harvester.rows[0]["id"] == "valid-123"
         assert output_path.exists()
+
+    def test_collect_documents_skips_non_aardvark(self, tmp_path):
+        """Test that documents without gbl_mdVersion_s=Aardvark are skipped."""
+        ogm_path = tmp_path / "opengeometadata"
+        output_path = tmp_path / "output.parquet"
+        ogm_path.mkdir()
+
+        # Create document with wrong version
+        (ogm_path / "old.json").write_text(
+            json.dumps({"id": "old-123", "gbl_mdVersion_s": "1.0"})
+        )
+
+        # Create document with missing version
+        (ogm_path / "missing.json").write_text(json.dumps({"id": "missing-123"}))
+
+        # Create valid Aardvark document
+        (ogm_path / "valid.json").write_text(
+            json.dumps({"id": "valid-123", "gbl_mdVersion_s": "Aardvark"})
+        )
+
+        harvester = OgmToParquet(str(ogm_path), str(output_path))
+        docs = harvester._collect_documents()
+
+        # Should only collect the Aardvark document
+        assert len(docs) == 1
+        assert docs[0]["id"] == "valid-123"
+
+    def test_collect_documents_skips_missing_id(self, tmp_path):
+        """Test that documents without id field are skipped."""
+        ogm_path = tmp_path / "opengeometadata"
+        output_path = tmp_path / "output.parquet"
+        ogm_path.mkdir()
+
+        # Create document without id
+        (ogm_path / "no_id.json").write_text(
+            json.dumps({"gbl_mdVersion_s": "Aardvark", "dct_title_s": "No ID"})
+        )
+
+        # Create document with empty id
+        (ogm_path / "empty_id.json").write_text(
+            json.dumps({"id": "", "gbl_mdVersion_s": "Aardvark"})
+        )
+
+        # Create valid document
+        (ogm_path / "valid.json").write_text(
+            json.dumps({"id": "valid-123", "gbl_mdVersion_s": "Aardvark"})
+        )
+
+        harvester = OgmToParquet(str(ogm_path), str(output_path))
+        docs = harvester._collect_documents()
+
+        # Should only collect document with valid id
+        assert len(docs) == 1
+        assert docs[0]["id"] == "valid-123"

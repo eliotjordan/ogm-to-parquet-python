@@ -182,10 +182,15 @@ class OgmToParquet:
     def _collect_documents(self) -> list[dict[str, Any]]:
         """Recursively collect all JSON documents from ogm_path.
 
+        Only includes documents that have an 'id' field and 'gbl_mdVersion_s'
+        set to 'Aardvark' (the current GeoBlacklight metadata schema version).
+
         Returns:
             List of parsed JSON documents
         """
         documents = []
+        skipped_no_id = 0
+        skipped_not_aardvark = 0
 
         if not self.ogm_path.exists():
             logger.error(f"Path does not exist: {self.ogm_path}")
@@ -199,14 +204,33 @@ class OgmToParquet:
             try:
                 with open(json_file, encoding="utf-8") as f:
                     doc = json.load(f)
+
                     # Only collect dict documents (skip strings, lists, etc.)
-                    if isinstance(doc, dict):
-                        documents.append(doc)
-                    else:
+                    if not isinstance(doc, dict):
                         logger.debug(f"Skipping non-dict JSON in {json_file}: {type(doc)}")
+                        continue
+
+                    # Require id field
+                    if not doc.get("id"):
+                        skipped_no_id += 1
+                        logger.debug(f"Skipping document without id: {json_file}")
+                        continue
+
+                    # Require Aardvark schema version
+                    if doc.get("gbl_mdVersion_s") != "Aardvark":
+                        skipped_not_aardvark += 1
+                        logger.debug(f"Skipping non-Aardvark document: {json_file}")
+                        continue
+
+                    documents.append(doc)
             except Exception as e:
                 logger.warning(f"Error reading {json_file}: {e}")
                 continue
+
+        if skipped_no_id > 0:
+            logger.info(f"Skipped {skipped_no_id} documents without id")
+        if skipped_not_aardvark > 0:
+            logger.info(f"Skipped {skipped_not_aardvark} non-Aardvark documents")
 
         return documents
 
