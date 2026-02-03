@@ -481,3 +481,53 @@ class TestOgmToParquet:
         # Should only collect document with valid id
         assert len(docs) == 1
         assert docs[0]["id"] == "valid-123"
+
+    def test_collect_documents_deduplicates_by_id(self, tmp_path):
+        """Test that duplicate documents with same id are deduplicated."""
+        ogm_path = tmp_path / "opengeometadata"
+        output_path = tmp_path / "output.parquet"
+        ogm_path.mkdir()
+
+        # Create two documents with the same id in different directories
+        subdir1 = ogm_path / "metadata-aardvark"
+        subdir1.mkdir()
+        (subdir1 / "doc.json").write_text(
+            json.dumps(
+                {
+                    "id": "duplicate-123",
+                    "gbl_mdVersion_s": "Aardvark",
+                    "dct_title_s": "First Version",
+                }
+            )
+        )
+
+        subdir2 = ogm_path / "metadata-1.0"
+        subdir2.mkdir()
+        (subdir2 / "doc.json").write_text(
+            json.dumps(
+                {
+                    "id": "duplicate-123",
+                    "gbl_mdVersion_s": "Aardvark",
+                    "dct_title_s": "Second Version",
+                }
+            )
+        )
+
+        # Create a document with a unique id
+        (subdir1 / "unique.json").write_text(
+            json.dumps(
+                {
+                    "id": "unique-456",
+                    "gbl_mdVersion_s": "Aardvark",
+                    "dct_title_s": "Unique Document",
+                }
+            )
+        )
+
+        harvester = OgmToParquet(str(ogm_path), str(output_path))
+        docs = harvester._collect_documents()
+
+        # Should only have 2 documents (one duplicate skipped)
+        assert len(docs) == 2
+        ids = {doc["id"] for doc in docs}
+        assert ids == {"duplicate-123", "unique-456"}

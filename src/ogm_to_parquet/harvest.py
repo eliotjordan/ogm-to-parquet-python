@@ -184,13 +184,16 @@ class OgmToParquet:
 
         Only includes documents that have an 'id' field and 'gbl_mdVersion_s'
         set to 'Aardvark' (the current GeoBlacklight metadata schema version).
+        Duplicate documents (same id) are skipped.
 
         Returns:
-            List of parsed JSON documents
+            List of parsed JSON documents (deduplicated by id)
         """
         documents = []
+        seen_ids: set[str] = set()
         skipped_no_id = 0
         skipped_not_aardvark = 0
+        skipped_duplicate = 0
 
         if not self.ogm_path.exists():
             logger.error(f"Path does not exist: {self.ogm_path}")
@@ -211,7 +214,8 @@ class OgmToParquet:
                         continue
 
                     # Require id field
-                    if not doc.get("id"):
+                    doc_id = doc.get("id")
+                    if not doc_id:
                         skipped_no_id += 1
                         logger.debug(f"Skipping document without id: {json_file}")
                         continue
@@ -222,6 +226,13 @@ class OgmToParquet:
                         logger.debug(f"Skipping non-Aardvark document: {json_file}")
                         continue
 
+                    # Skip duplicate ids
+                    if doc_id in seen_ids:
+                        skipped_duplicate += 1
+                        logger.debug(f"Skipping duplicate id {doc_id}: {json_file}")
+                        continue
+
+                    seen_ids.add(doc_id)
                     documents.append(doc)
             except Exception as e:
                 logger.warning(f"Error reading {json_file}: {e}")
@@ -231,6 +242,8 @@ class OgmToParquet:
             logger.info(f"Skipped {skipped_no_id} documents without id")
         if skipped_not_aardvark > 0:
             logger.info(f"Skipped {skipped_not_aardvark} non-Aardvark documents")
+        if skipped_duplicate > 0:
+            logger.info(f"Skipped {skipped_duplicate} duplicate documents")
 
         return documents
 
@@ -508,7 +521,7 @@ def main():
         "--max-vocab-size",
         type=int,
         default=5000,
-        help="Maximum vocabulary size (lower = smaller model). Default: 10000",
+        help="Maximum vocabulary size (lower = smaller model). Default: 5000",
     )
     parser.add_argument(
         "--no-embeddings",
