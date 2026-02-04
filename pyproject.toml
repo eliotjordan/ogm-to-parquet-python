@@ -9,11 +9,14 @@ dependencies = [
     "geojson>=3.0.0",
     "model2vec>=0.3.0",
     "pyyaml>=6.0.0",
+    "pillow>=10.0.0",
+    "requests>=2.31.0",
 ]
 
 [project.scripts]
 ogm-harvest = "ogm_to_parquet.harvest:main"
 ogm-enrich-prepare = "ogm_to_parquet.enrichment:main"
+ogm-enrich-extract = "ogm_to_parquet.text_extract:main"
 
 [project.optional-dependencies]
 dev = [
