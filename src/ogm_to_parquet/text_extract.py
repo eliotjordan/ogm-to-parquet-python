@@ -541,7 +541,7 @@ Only output the JSON document."""
         logger.warning(f"Document {doc_id} marked as error")
 
     def _cleanup_file(self, file_path: Path) -> None:
-        """Clean up a file and its parent directory if it was extracted.
+        """Clean up a file and its parent directory if it was extracted and empty.
 
         Args:
             file_path: Path to file to clean up
@@ -550,10 +550,12 @@ Only output the JSON document."""
             if file_path.exists():
                 file_path.unlink()
 
-            # Check if parent is an extraction directory
+            # Check if parent is an extraction directory and is now empty
             parent = file_path.parent
             if parent.name.endswith("_extracted") and parent.exists():
-                shutil.rmtree(parent)
+                # Only delete if directory is empty (no other files remain)
+                if not any(parent.iterdir()):
+                    shutil.rmtree(parent)
 
         except Exception as e:
             logger.warning(f"Failed to cleanup {file_path}: {e}")

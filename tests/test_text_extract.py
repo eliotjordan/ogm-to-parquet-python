@@ -186,8 +186,8 @@ class TestCleanupFile:
         extractor._cleanup_file(test_file)
         assert not test_file.exists()
 
-    def test_cleanup_extracted_directory(self, extractor, tmp_path):
-        """Test cleaning up an extracted directory."""
+    def test_cleanup_extracted_directory_when_empty(self, extractor, tmp_path):
+        """Test cleaning up an extracted directory when it becomes empty."""
         extract_dir = tmp_path / "doc123_extracted"
         extract_dir.mkdir()
         test_file = extract_dir / "image.jpg"
@@ -195,6 +195,21 @@ class TestCleanupFile:
 
         extractor._cleanup_file(test_file)
         assert not extract_dir.exists()
+
+    def test_cleanup_keeps_directory_with_other_files(self, extractor, tmp_path):
+        """Test that cleanup doesn't delete directory if other files remain."""
+        extract_dir = tmp_path / "doc456_extracted"
+        extract_dir.mkdir()
+        original_file = extract_dir / "image.jp2"
+        original_file.write_text("original")
+        converted_file = extract_dir / "image.jpg"
+        converted_file.write_text("converted")
+
+        # Cleanup the original file - directory should remain because converted file exists
+        extractor._cleanup_file(original_file)
+        assert not original_file.exists()
+        assert extract_dir.exists()
+        assert converted_file.exists()
 
     def test_cleanup_nonexistent_file(self, extractor, tmp_path):
         """Test cleaning up a nonexistent file doesn't raise."""
