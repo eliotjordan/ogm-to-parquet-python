@@ -77,6 +77,7 @@ class TestEnrichmentPreparer:
         assert "format" in columns
         assert "derivative_url" in columns
         assert "status" in columns
+        assert "error_message" in columns
 
     def test_text_extraction_table_schema(self, db_connection):
         """Test text_extraction table has correct columns."""
@@ -89,6 +90,7 @@ class TestEnrichmentPreparer:
         assert "format" in columns
         assert "generated_output" in columns
         assert "status" in columns
+        assert "error_message" in columns
 
 
 class TestCloudDerivativesFiltering:

@@ -280,12 +280,13 @@ class TestMarkError:
                 image_url TEXT,
                 format TEXT,
                 generated_output TEXT,
-                status TEXT
+                status TEXT,
+                error_message TEXT
             )
         """)
         cursor.execute(
-            "INSERT INTO text_extraction VALUES (?, ?, ?, ?, ?)",
-            ("test-doc", "http://example.com/img.jpg", "TIFF", "", "in_progress"),
+            "INSERT INTO text_extraction VALUES (?, ?, ?, ?, ?, ?)",
+            ("test-doc", "http://example.com/img.jpg", "TIFF", "", "in_progress", None),
         )
         conn.commit()
         conn.close()
@@ -301,11 +302,25 @@ class TestMarkError:
         extractor_with_db._mark_error(conn, "test-doc")
 
         cursor = conn.cursor()
-        cursor.execute("SELECT status FROM text_extraction WHERE id = ?", ("test-doc",))
+        cursor.execute("SELECT status, error_message FROM text_extraction WHERE id = ?", ("test-doc",))
         row = cursor.fetchone()
         conn.close()
 
         assert row[0] == "error"
+        assert row[1] is None  # No error message provided
+
+    def test_mark_error_with_message(self, extractor_with_db):
+        """Test that mark_error saves the error message."""
+        conn = sqlite3.connect(extractor_with_db.db_path)
+        extractor_with_db._mark_error(conn, "test-doc", "Download failed: 404 Not Found")
+
+        cursor = conn.cursor()
+        cursor.execute("SELECT status, error_message FROM text_extraction WHERE id = ?", ("test-doc",))
+        row = cursor.fetchone()
+        conn.close()
+
+        assert row[0] == "error"
+        assert row[1] == "Download failed: 404 Not Found"
 
 
 class TestCheckOllamaConnection:
@@ -380,16 +395,17 @@ class TestProcessAllIntegration:
                 image_url TEXT,
                 format TEXT,
                 generated_output TEXT,
-                status TEXT
+                status TEXT,
+                error_message TEXT
             )
         """)
         cursor.execute(
-            "INSERT INTO text_extraction VALUES (?, ?, ?, ?, ?)",
-            ("doc1", "http://example.com/img1.jpg", "TIFF", "", "unprocessed"),
+            "INSERT INTO text_extraction VALUES (?, ?, ?, ?, ?, ?)",
+            ("doc1", "http://example.com/img1.jpg", "TIFF", "", "unprocessed", None),
         )
         cursor.execute(
-            "INSERT INTO text_extraction VALUES (?, ?, ?, ?, ?)",
-            ("doc2", "", "JPEG", "", "unprocessed"),
+            "INSERT INTO text_extraction VALUES (?, ?, ?, ?, ?, ?)",
+            ("doc2", "", "JPEG", "", "unprocessed", None),
         )
         conn.commit()
         conn.close()

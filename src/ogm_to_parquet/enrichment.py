@@ -77,7 +77,8 @@ class EnrichmentPreparer:
                     download_url TEXT,
                     format TEXT,
                     derivative_url TEXT,
-                    status TEXT
+                    status TEXT,
+                    error_message TEXT
                 )
             """)
 
@@ -88,7 +89,8 @@ class EnrichmentPreparer:
                     image_url TEXT,
                     format TEXT,
                     generated_output TEXT,
-                    status TEXT
+                    status TEXT,
+                    error_message TEXT
                 )
             """)
 

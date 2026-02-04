@@ -218,14 +218,14 @@ class TextExtractor:
             # Download the file
             image_path = self._download_file(image_url, doc_id)
             if image_path is None:
-                self._mark_error(conn, doc_id)
+                self._mark_error(conn, doc_id, f"Failed to download image from {image_url}")
                 return "error"
 
             # Validate and convert image
             processed_path = self._prepare_image(image_path)
             if processed_path is None:
                 self._cleanup_file(image_path)
-                self._mark_error(conn, doc_id)
+                self._mark_error(conn, doc_id, f"Failed to prepare image: {image_path.name}")
                 return "error"
 
             # If we converted, update the path
@@ -237,7 +237,9 @@ class TextExtractor:
             extracted_json = self._extract_text_with_retry(image_path)
             if extracted_json is None:
                 self._cleanup_file(image_path)
-                self._mark_error(conn, doc_id)
+                self._mark_error(
+                    conn, doc_id, "Failed to extract text after maximum retries"
+                )
                 return "error"
 
             # Save result
@@ -256,7 +258,7 @@ class TextExtractor:
             logger.error(f"Error processing document {doc_id}: {e}")
             if image_path:
                 self._cleanup_file(image_path)
-            self._mark_error(conn, doc_id)
+            self._mark_error(conn, doc_id, str(e))
             return "error"
 
     def _download_file(self, url: str, doc_id: str) -> Path | None:
@@ -528,17 +530,23 @@ Only output the JSON document."""
 
         return None
 
-    def _mark_error(self, conn: sqlite3.Connection, doc_id: str) -> None:
+    def _mark_error(
+        self, conn: sqlite3.Connection, doc_id: str, error_message: str | None = None
+    ) -> None:
         """Mark a document as errored in the database.
 
         Args:
             conn: Database connection
             doc_id: Document ID
+            error_message: Optional error message describing the failure
         """
         cursor = conn.cursor()
-        cursor.execute("UPDATE text_extraction SET status = 'error' WHERE id = ?", (doc_id,))
+        cursor.execute(
+            "UPDATE text_extraction SET status = 'error', error_message = ? WHERE id = ?",
+            (error_message, doc_id),
+        )
         conn.commit()
-        logger.warning(f"Document {doc_id} marked as error")
+        logger.warning(f"Document {doc_id} marked as error: {error_message}")
 
     def _cleanup_file(self, file_path: Path) -> None:
         """Clean up a file and its parent directory if it was extracted and empty.
