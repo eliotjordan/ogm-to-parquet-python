@@ -70,7 +70,7 @@ VALID_IMAGE_EXTENSIONS = {
     ".gif",
     ".bmp",
     ".webp",
-    ".jp2",  # JPEG2000
+    ".jp2",
 }
 
 # Maximum image size for Ollama (9MB)
@@ -590,6 +590,7 @@ Only output the JSON document."""
 def main():
     """Command-line entry point for text extraction."""
     import argparse
+    import sys
 
     logging.basicConfig(
         level=logging.INFO,
@@ -651,8 +652,12 @@ def main():
         timeout=args.timeout,
     )
 
-    results = extractor.process_all(doc_id=args.id)
-    print(f"Extraction complete: {results}")
+    try:
+        results = extractor.process_all(doc_id=args.id)
+        print(f"Extraction complete: {results}")
+    except KeyboardInterrupt:
+        print("\nInterrupted by user. Exiting.")
+        sys.exit(130)  # Standard exit code for Ctrl+C
 
 
 if __name__ == "__main__":
