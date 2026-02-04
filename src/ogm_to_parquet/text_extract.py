@@ -147,8 +147,13 @@ class TextExtractor:
             logger.error(f"Error checking Ollama connection: {e}")
             return False
 
-    def process_all(self) -> dict[str, int]:
-        """Process all unprocessed documents in the text_extraction table.
+    def process_all(self, doc_id: str | None = None) -> dict[str, int]:
+        """Process documents in the text_extraction table.
+
+        Args:
+            doc_id: Optional document ID to process. If provided, only this document
+                   will be processed regardless of its current status. If None,
+                   all unprocessed documents will be processed.
 
         Returns:
             Dictionary with counts of processed, errored, and skipped documents
@@ -165,12 +170,25 @@ class TextExtractor:
         stats = {"completed": 0, "errors": 0, "skipped": 0}
 
         try:
-            # Get all unprocessed documents
             cursor = conn.cursor()
-            cursor.execute("SELECT id, image_url FROM text_extraction WHERE status = 'unprocessed'")
-            documents = cursor.fetchall()
 
-            logger.info(f"Found {len(documents)} unprocessed documents")
+            if doc_id:
+                # Process specific document by ID (regardless of status)
+                cursor.execute(
+                    "SELECT id, image_url FROM text_extraction WHERE id = ?", (doc_id,)
+                )
+                documents = cursor.fetchall()
+                if not documents:
+                    logger.warning(f"Document {doc_id} not found in text_extraction table")
+                    return stats
+                logger.info(f"Processing single document: {doc_id}")
+            else:
+                # Get all unprocessed documents
+                cursor.execute(
+                    "SELECT id, image_url FROM text_extraction WHERE status = 'unprocessed'"
+                )
+                documents = cursor.fetchall()
+                logger.info(f"Found {len(documents)} unprocessed documents")
 
             for doc_id, image_url in documents:
                 if not image_url:
@@ -615,6 +633,12 @@ def main():
         default=300,
         help="Request timeout in seconds (default: 300)",
     )
+    parser.add_argument(
+        "--id",
+        type=str,
+        default=None,
+        help="Process only this document ID (processes regardless of current status)",
+    )
 
     args = parser.parse_args()
 
@@ -627,7 +651,7 @@ def main():
         timeout=args.timeout,
     )
 
-    results = extractor.process_all()
+    results = extractor.process_all(doc_id=args.id)
     print(f"Extraction complete: {results}")
 
 

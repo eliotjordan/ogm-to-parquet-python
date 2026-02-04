@@ -434,3 +434,46 @@ class TestProcessAllIntegration:
 
         # Should return empty stats without processing anything
         assert results == {"completed": 0, "errors": 0, "skipped": 0}
+
+    def test_process_single_document_by_id(self, extractor_with_docs):
+        """Test processing a single document by ID."""
+        with (
+            patch.object(extractor_with_docs, "check_ollama_connection", return_value=True),
+            patch.object(extractor_with_docs, "_process_document") as mock_process,
+        ):
+            mock_process.return_value = "completed"
+            results = extractor_with_docs.process_all(doc_id="doc1")
+
+        # Should only process doc1
+        assert mock_process.call_count == 1
+        call_args = mock_process.call_args[0]
+        assert call_args[1] == "doc1"  # doc_id argument
+        assert results["completed"] == 1
+
+    def test_process_single_document_not_found(self, extractor_with_docs):
+        """Test processing a document ID that doesn't exist."""
+        with patch.object(extractor_with_docs, "check_ollama_connection", return_value=True):
+            results = extractor_with_docs.process_all(doc_id="nonexistent-doc")
+
+        # Should return empty stats since document not found
+        assert results == {"completed": 0, "errors": 0, "skipped": 0}
+
+    def test_process_single_document_ignores_status(self, extractor_with_docs):
+        """Test that processing by ID works regardless of document status."""
+        # Update doc1 to have 'complete' status
+        conn = sqlite3.connect(extractor_with_docs.db_path)
+        cursor = conn.cursor()
+        cursor.execute("UPDATE text_extraction SET status = 'complete' WHERE id = 'doc1'")
+        conn.commit()
+        conn.close()
+
+        with (
+            patch.object(extractor_with_docs, "check_ollama_connection", return_value=True),
+            patch.object(extractor_with_docs, "_process_document") as mock_process,
+        ):
+            mock_process.return_value = "completed"
+            results = extractor_with_docs.process_all(doc_id="doc1")
+
+        # Should still process doc1 even though it was already 'complete'
+        assert mock_process.call_count == 1
+        assert results["completed"] == 1
