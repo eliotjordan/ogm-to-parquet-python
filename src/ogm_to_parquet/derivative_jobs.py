@@ -350,7 +350,7 @@ def update_status(
     derivative_url: str | None = None,
     error_message: str | None = None,
     max_retries: int = 5,
-) -> None:
+) -> bool:
     """Update document status in database with retry logic.
 
     Args:
@@ -360,6 +360,9 @@ def update_status(
         derivative_url: Output file path (for success)
         error_message: Error description (for failure)
         max_retries: Maximum retry attempts for database operations
+
+    Returns:
+        True if a row was updated, False if no matching row found
     """
     for attempt in range(max_retries):
         try:
@@ -382,7 +385,12 @@ def update_status(
                         (status, doc_id),
                     )
                 conn.commit()
-                return
+                rows_affected = cursor.rowcount
+                if rows_affected == 0:
+                    logger.warning(f"[{doc_id}] No row found in database to update status to '{status}'")
+                    return False
+                logger.debug(f"[{doc_id}] Status updated to '{status}'")
+                return True
             finally:
                 conn.close()
         except sqlite3.OperationalError as e:
@@ -391,7 +399,9 @@ def update_status(
                 logger.warning(f"Database locked, retrying in {sleep_time:.1f}s...")
                 time.sleep(sleep_time)
             else:
+                logger.error(f"[{doc_id}] Database error updating status: {e}")
                 raise
+    return False
 
 
 def increment_retry_count(db_path: str, doc_id: str, max_retries: int = 5) -> int:
@@ -619,9 +629,12 @@ def _process_vector(
         handle_job_failure(db_path, doc_id, error_msg)
         return {"success": False, "error": error_msg}
 
-    # Success
-    logger.info(f"[{doc_id}] Complete: {final_output}")
-    update_status(db_path, doc_id, "complete", derivative_url=str(final_output))
+    # Success - update database status
+    logger.info(f"[{doc_id}] Conversion complete, updating database status")
+    if update_status(db_path, doc_id, "complete", derivative_url=str(final_output)):
+        logger.info(f"[{doc_id}] Successfully marked complete: {final_output}")
+    else:
+        logger.error(f"[{doc_id}] Failed to mark complete in database")
     return {"success": True, "output_path": str(final_output)}
 
 
@@ -649,7 +662,10 @@ def _process_image(
         handle_job_failure(db_path, doc_id, error_msg)
         return {"success": False, "error": error_msg}
 
-    # Success
-    logger.info(f"[{doc_id}] Complete: {final_output}")
-    update_status(db_path, doc_id, "complete", derivative_url=str(final_output))
+    # Success - update database status
+    logger.info(f"[{doc_id}] Conversion complete, updating database status")
+    if update_status(db_path, doc_id, "complete", derivative_url=str(final_output)):
+        logger.info(f"[{doc_id}] Successfully marked complete: {final_output}")
+    else:
+        logger.error(f"[{doc_id}] Failed to mark complete in database")
     return {"success": True, "output_path": str(final_output)}

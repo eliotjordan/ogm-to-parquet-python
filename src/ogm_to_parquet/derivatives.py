@@ -68,9 +68,10 @@ class DerivativeProcessor:
             max_retries: Maximum retry attempts for failed jobs
             delay: Delay in seconds between job submissions (rate limiting)
         """
-        self.db_path = Path(db_path)
-        self.scratch_dir = Path(scratch_dir)
-        self.output_dir = Path(output_dir)
+        # Convert all paths to absolute to ensure workers can find them
+        self.db_path = Path(db_path).resolve()
+        self.scratch_dir = Path(scratch_dir).resolve()
+        self.output_dir = Path(output_dir).resolve()
         self.redis_url = redis_url
         self.tippecanoe_timeout = tippecanoe_timeout
         self.max_retries = max_retries

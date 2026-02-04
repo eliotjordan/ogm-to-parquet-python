@@ -13,12 +13,11 @@ When I give you a task:
 4. Use descriptive variable and function names.
 5. Make the code easy to extend and test.
 6. Suggest at least one improvement for scalability or clarity after the code.
-7. Please tone down the overly positive tone and don’t use emojis in conversation, text, or documents.
+7. Please tone down the overly positive tone and don't use emojis in conversation, text, or documents.
 
 ## Overview
 
-Python tool that converts OpenGeoMetadata JSON files into a single Parquet file optimized for querying with DuckDB. This is the modern Python rewrite of the Ruby harvester (located in sibling directory `../ogm-to-parquet/`).
-
+Python tool that converts OpenGeoMetadata JSON files into a single Parquet file optimized for querying with DuckDB, plus enrichment pipelines for generating cloud-optimized derivatives (PMTiles, pyramidal TIFFs) and extracting text from map images.
 
 ## Quick Start
 
@@ -26,339 +25,246 @@ Python tool that converts OpenGeoMetadata JSON files into a single Parquet file 
 # Install dependencies
 uv sync --all-extras
 
-# Install with distillation support (includes torch and sentence-transformers)
-uv sync --extra distill
+# Start Redis (required for derivatives processing)
+docker compose up -d
 
-# Run harvester with default settings (128 dims, 5K vocab, ~15MB model)
+# Run harvester with default settings
 uv run ogm-harvest
 
-# Run with small model (~8 MB, good for web)
-uv run ogm-harvest --embedding-dims 64 --max-vocab-size 2000
+# Prepare enrichment tasks
+uv run ogm-enrich-prepare
 
-# Run with tiny model (~5 MB, for mobile)
-uv run ogm-harvest --embedding-dims 32 --max-vocab-size 1000
+# Process derivatives (vector → PMTiles, image → pyramidal TIFF)
+uv run ogm-enrich-derivatives
 
-# Run without embeddings
-uv run ogm-harvest --no-embeddings
-
-# Download OpenGeoMetadata repositories and harvest
-uv run ogm-harvest --download
-
-# Download using custom repos config
-uv run ogm-harvest --download --repos-config my-repos.yaml
-
-# Download to custom directory
-uv run ogm-harvest --download --ogm-path ./data/opengeometadata
-
-# Download only (skip harvesting)
-uv run ogm-harvest --download-only
+# Extract text from map images
+uv run ogm-enrich-extract
 
 # Run tests
 uv run pytest
 
-# Run tests with coverage
-uv run pytest --cov
-
-# Run specific test file
-uv run pytest tests/test_geometry.py
-
-# Run tests matching pattern
-uv run pytest -k "envelope"
-
-# Run distillation tests (requires --extra distill)
-uv run pytest tests/test_embeddings.py -k "distill"
-
-# Lint code with ruff
+# Lint code
 uv run ruff check src tests
+```
 
-# Format code with ruff
-uv run ruff format src tests
+## CLI Commands
 
-# Check formatting without making changes
-uv run ruff format --check src tests
+### ogm-harvest - Convert OGM to Parquet
+
+```bash
+# Default settings (128 dims, 5K vocab)
+uv run ogm-harvest
+
+# Download OGM repositories first
+uv run ogm-harvest --download
+
+# Custom model size
+uv run ogm-harvest --embedding-dims 64 --max-vocab-size 2000
+
+# Without embeddings
+uv run ogm-harvest --no-embeddings
+```
+
+### ogm-enrich-prepare - Prepare Enrichment Tasks
+
+Scans harvested documents and populates the enrichment database with tasks:
+
+```bash
+uv run ogm-enrich-prepare
+```
+
+Creates `tmp/enrichment.db` with two tables:
+- `cloud_derivatives` - Vector/image files to convert
+- `text_extraction` - Images for OCR text extraction
+
+### ogm-enrich-derivatives - Process Cloud Derivatives
+
+Converts vector files to PMTiles and images to pyramidal TIFFs using RQ job queue:
+
+```bash
+# Full processing (enqueue + workers + monitor)
+uv run ogm-enrich-derivatives
+
+# Start workers for existing queue (after restart)
+uv run ogm-enrich-derivatives --workers-only
+
+# Preview what would be processed
+uv run ogm-enrich-derivatives --dry-run
+
+# Just enqueue jobs (run workers separately)
+uv run ogm-enrich-derivatives --enqueue-only
+
+# Monitor existing queue
+uv run ogm-enrich-derivatives --monitor-only
+
+# Print queue statistics
+uv run ogm-enrich-derivatives --stats
+
+# Process single document
+uv run ogm-enrich-derivatives --id "stanford-abc123"
+
+# Custom settings
+uv run ogm-enrich-derivatives --workers 4 --delay 2.0 --tippecanoe-timeout 3600
+```
+
+**Requires Redis** - Start with `docker compose up -d`
+
+### ogm-enrich-extract - Extract Text from Maps
+
+Uses Ollama vision models to extract text from map images:
+
+```bash
+uv run ogm-enrich-extract
+
+# Process single document
+uv run ogm-enrich-extract --id "doc123"
+
+# Custom Ollama settings
+uv run ogm-enrich-extract --ollama-url http://localhost:11434 --model qwen2.5-vl:32b
 ```
 
 ## Architecture
 
 ### Core Components
 
-**src/ogm_to_parquet/download.py** - Repository download and update:
-- `load_repository_list()` loads repo list from YAML config file
-- `clone_repository()` creates shallow clones (`--depth 1`) for efficiency
-- `update_repository()` runs `git pull` on existing repos
-- `download_repositories()` orchestrates clone/update for all repos
-- Default repos defined in `repos.yaml` (18 institutions)
+**src/ogm_to_parquet/harvest.py** - Main harvester:
+- Converts OGM JSON files to Parquet with embeddings
+- Field mapping, data cleaning, geometry conversion
+- Outputs `tmp/ogm.parquet`
 
-**src/ogm_to_parquet/embeddings.py** - Embedding generation with Model2Vec:
-- `VocabularyBuilder` extracts vocabulary from controlled vocab and free-text fields
-- `distill_model()` distills all-MiniLM-L6-v2 with custom vocabulary for browser use
-- `EmbeddingGenerator` generates document embeddings using the distilled model
-- Outputs tokenizer.json, model.safetensors, embeddings.bin, and metadata.json
+**src/ogm_to_parquet/enrichment.py** - Enrichment preparation:
+- Filters documents for cloud derivatives and text extraction
+- Populates SQLite database with tasks
+- Outputs `tmp/enrichment.db`
 
-**src/ogm_to_parquet/harvest.py** - Main harvester orchestration:
-- `OgmToParquet` class manages the entire conversion pipeline
-- Recursively scans `tmp/opengeometadata/` for JSON files
-- Field mapping via `FIELD_MAP` (GeoBlacklight schema → simplified schema)
-- Data cleaning removes single quotes to prevent SQL injection
-- PyArrow schema in `PARQUET_SCHEMA` defines output structure
-- Outputs to `tmp/ogm.parquet` with ZSTD compression
+**src/ogm_to_parquet/derivatives.py** - Derivative processing orchestration:
+- `DerivativeProcessor` class manages RQ job queue
+- Starts workers, monitors progress, handles graceful shutdown
+- Uses Redis for job queue (requires `docker compose up -d`)
 
-**src/ogm_to_parquet/geometry.py** - Geometry transformations:
-- `Geometry` class converts WKT and ENVELOPE syntax to GeoJSON
-- Uses Shapely for WKT parsing and bounding box extraction
-- Provides world extent fallback for invalid geometries
-- ENVELOPE format: `ENVELOPE(minx, maxx, maxy, miny)` → WKT POLYGON
+**src/ogm_to_parquet/derivative_jobs.py** - RQ job functions:
+- `process_derivative()` - Main job function for workers
+- Vector files: ogr2ogr → FlatGeobuf → tippecanoe → PMTiles
+- Image files: pyvips → pyramidal TIFF (JPEG compression, 1024x1024 tiles)
+- Handles retries, status updates, cleanup
 
-### Data Pipeline
+**src/ogm_to_parquet/text_extract.py** - Text extraction:
+- Downloads map images, processes with Ollama vision model
+- Extracts categorized text (titles, legends, place names, etc.)
 
-1. **Collection** (`_collect_documents`): Recursively find all `.json` files under `tmp/opengeometadata/`
-2. **Vocabulary Building** (`_prepare_embedding_model`): Extract vocabulary from all documents
-   - Controlled vocabulary fields added directly (creator, location, provider, resource_class, etc.)
-   - Free-text fields tokenized and common terms extracted (title, description, publisher)
-   - Bigrams included for domain-specific phrases
-3. **Model Distillation**: Distill all-MiniLM-L6-v2 with custom vocabulary
-   - PCA reduction to 256 dimensions for small file size
-   - Outputs saved to `tmp/ogm-model/` (tokenizer.json, model.safetensors, embeddings.bin, metadata.json)
-   - Metadata saved for browser loading
-4. **Document Processing**: For each document:
-   - **Remapping** (`_remap_doc_keys`): Apply `FIELD_MAP` to convert GeoBlacklight field names
-   - **Cleaning** (`_clean_values`): Strip single quotes from strings, preserve numeric types
-   - **Embedding Generation**: Generate 256-dim embedding vector using distilled model
-   - **Row Building** (`_build_row`): Extract geometry, thumbnail, embeddings, ensure correct types
-5. **Parquet Writing** (`_write_parquet`): Convert to PyArrow Table and write with ZSTD compression
+### Database Schema (enrichment.db)
 
-### Field Types
-
-**Scalar fields** (pa.string()): `id`, `title`, `provider`, `access_rights`, `format`, `thumbnail`, `geojson`, `description`, `wxs_identifier`, `modified`
-
-**List fields** (pa.list_(pa.string())): `creator`, `location`, `publisher`, `resource_class`, `resource_type`, `subject`, `theme`, `identifier`, `temporal`
-
-**Float list field**: `index_year` (pa.list_(pa.float64())) - converts strings/ints to floats
-
-**Embedding field**: `embeddings` (pa.list_(pa.float32())) - 256-dimensional embedding vectors for semantic search
-
-**Important**: List fields in Parquet become DuckDB LIST columns requiring `list_contains()` or `UNNEST()` for querying.
-
-### Geometry Handling
-
-The harvester generates GeoJSON from the `dcat_bbox` field. The output includes:
-- **geojson** (string): Text GeoJSON representation
-- No native geometry field (removed in recent update - was generating WKB but caused issues)
-
-If native DuckDB GEOMETRY type is needed, use `convert_geometry.sql` post-processing script:
+**cloud_derivatives table:**
 ```sql
-INSTALL spatial;
-LOAD spatial;
-COPY (
-  SELECT *, ST_GeomFromGeoJSON(geojson) AS geometry
-  FROM 'tmp/ogm.parquet'
-) TO 'tmp/cloud.parquet' (FORMAT PARQUET, COMPRESSION zstd, PARQUET_VERSION v2);
+CREATE TABLE cloud_derivatives (
+    id TEXT PRIMARY KEY,
+    download_url TEXT,
+    format TEXT,              -- GeoJSON, Shapefile, JPEG, TIFF, etc.
+    derivative_url TEXT,      -- Output file path when complete
+    status TEXT,              -- unprocessed, enqueued, in_progress, complete, error
+    error_message TEXT,
+    retry_count INTEGER
+);
 ```
 
-### Thumbnail Extraction
+**Status flow:** `unprocessed` → `enqueued` → `in_progress` → `complete`/`error`
 
-Parses `dct_references_s` JSON field (harvest.py:343-373):
-1. Prefers `http://schema.org/thumbnailUrl`
-2. Falls back to `http://iiif.io/api/image`, converting `info.json` URL to 150x150 thumbnail
-3. Returns None if neither available
+### Output Directory Structure
 
-### Type Coercion Helpers
+Derivatives are stored with nested paths based on cleaned document IDs:
 
-**_ensure_string**: Converts to string, joins list elements with space
-**_ensure_list**: Wraps scalars in list, returns None for empty lists
-**_ensure_float_list**: Converts strings/ints to floats, filters non-convertible values
-
-## Testing Strategy
-
-**96 tests total** with extensive coverage:
-- **test_download.py**: 22 tests for repository loading, cloning, updating, and config parsing
-- **test_geometry.py**: 14 tests for WKT/ENVELOPE parsing, GeoJSON conversion, bbox extraction
-- **test_harvest.py**: 42 tests for field mapping, data cleaning, thumbnail extraction, type coercion
-- **test_embeddings.py**: 18 tests for vocabulary building, embedding generation, model distillation
-  - 14 tests always run (vocabulary building, tokenization logic)
-  - 4 tests require torch/sentence-transformers (marked with `@requires_distill`, skipped unless `uv sync --extra distill`)
-
-### Running Specific Tests
-
-```bash
-# Single test file
-uv run pytest tests/test_geometry.py
-
-# Single test method
-uv run pytest tests/test_harvest.py::TestOgmToParquet::test_remap_doc_keys
-
-# Tests matching pattern
-uv run pytest -k "thumbnail"
-
-# Verbose output
-uv run pytest -v
-
-# With coverage report
-uv run pytest --cov
-
-# Generate HTML coverage report
-uv run pytest --cov-report=html
+```
+tmp/cloud_derivatives/
+  pn/86/3f/pn863fv0810/dataset.pmtiles   # Vector → PMTiles
+  ab/c1/23/abc123def/dataset.tif          # Image → pyramidal TIFF
 ```
 
-### Coverage Configuration
-
-Coverage thresholds defined in `pyproject.toml`:
-- Source: `src/ogm_to_parquet`
-- Excludes: `tests/*`, pragma comments, `__repr__`, `__main__`
-- Reports: terminal + HTML
-
-## Linting
-
-The project uses [Ruff](https://docs.astral.sh/ruff/) for linting and formatting.
-
-**Configuration** (in `pyproject.toml`):
-- Line length: 100 characters
-- Target: Python 3.11+
-- Enabled rules: pycodestyle, pyflakes, isort, flake8-bugbear, flake8-comprehensions, pyupgrade
-- Auto-formatting with double quotes and spaces
-
-**Commands**:
-```bash
-# Check linting
-uv run ruff check src tests
-
-# Auto-fix linting issues
-uv run ruff check --fix src tests
-
-# Check formatting
-uv run ruff format --check src tests
-
-# Apply formatting
-uv run ruff format src tests
-```
-
-## CI/CD
-
-GitHub Actions workflow (`.github/workflows/ci.yml`) runs on push to main and pull requests:
-
-**Lint Job**:
-- Runs ruff linter and formatter checks
-- Python 3.11 on Ubuntu
-
-**Test Job**:
-- Runs full test suite with coverage on Python 3.11 and 3.12
-- Includes distillation tests (with torch/sentence-transformers)
-- Uploads coverage to Codecov
-
-**Test-No-Distill Job**:
-- Verifies tests work without optional distillation dependencies
-- Ensures core functionality doesn't require torch
-- Distillation tests are automatically skipped
-
-## Adding New Fields
-
-1. Add mapping to `FIELD_MAP` in harvest.py (line 24)
-2. Add field to `PARQUET_SCHEMA` with correct PyArrow type (line 48)
-3. Update `_build_row()` method with field extraction logic (line 218)
-4. Add tests in `tests/test_harvest.py`
-5. Update downstream consumers (e.g., `cloud-ogm-react/src/lib/fieldsConfig.ts`)
-
-## Data Cleaning
-
-All string values have single quotes stripped (`value.replace("'", "")`) to prevent SQL injection when the Parquet file is queried. This applies to:
-- Scalar string fields
-- Array/list elements that are strings
-- Does NOT apply to numeric types (preserved as-is)
-
-## Key Differences from Ruby Version
-
-1. Comprehensive test suite (56 tests vs 0)
-2. Type hints throughout for IDE support
-3. Modern package management with uv
-4. Better error handling and logging
-5. No SQLite dependency (Ruby version uses geo_combine)
-6. Simpler geometry handling (Shapely instead of RGeo)
-
-## Embedding Generation
-
-### Vocabulary Building
-
-The harvester builds a custom vocabulary from metadata fields:
-
-**Controlled Vocabulary Fields** (added directly):
-- creator, location, provider, access_rights, resource_class, resource_type, subject, theme, format
-
-**Free-Text Fields** (common terms extracted):
-- title, description, publisher
-
-**Process**:
-1. All controlled vocab values are lowercased and added to vocabulary
-2. Free-text fields are tokenized and filtered:
-   - Stopwords removed (the, a, an, of, etc.)
-   - Minimum term frequency threshold (default: 2)
-   - Top N most common terms extracted (default: 10,000)
-   - Bigrams included for domain-specific phrases
-
-### Model Distillation
-
-Uses Model2Vec to distill `sentence-transformers/all-MiniLM-L6-v2`:
-- PCA reduction to configurable dimensions (32, 64, 128, or 256)
-- Custom vocabulary ensures good coverage of domain terms
-- Configurable vocabulary size (1K to 10K+ terms)
-- Output files saved to `tmp/ogm-model/`:
-  - `tokenizer.json` - HuggingFace tokenizer (for browser use)
-  - `model.safetensors` - Model weights in safetensors format
-  - `embeddings.bin` - Raw float32 binary (easier to load in browser)
-  - `metadata.json` - Vocab size, embedding dims, base model info
-
-**Model Size Options:**
-
-| Configuration | Model Size | Vocabulary | Quality |
-|--------------|------------|------------|---------|
-| 32 dims, 1K vocab | ~5 MB | Most frequent 1000 terms | Good |
-| 64 dims, 2K vocab | ~8 MB | Most frequent 2000 terms | Very Good |
-| 128 dims, 5K vocab | ~15 MB | Most frequent 5000 terms | Excellent (default) |
-| 256 dims, 10K vocab | ~35 MB | 10000+ terms | Best |
-
-For smaller models (vocab < 10K), controlled vocabulary is limited to most frequent terms only.
-
-### Browser Loading
-
-The distilled model can be loaded in JavaScript/WASM:
-1. Load `tokenizer.json` using HuggingFace tokenizers.js
-2. Load `embeddings.bin` as Float32Array
-3. Tokenize query text, lookup embeddings, average vectors
-4. No neural network required - just tokenization and vector arithmetic
-
-See embeddings.py docstring for implementation details.
-
-### Disabling Embeddings
-
-Pass `enable_embeddings=False` to `OgmToParquet` constructor:
-```python
-harvester = OgmToParquet(enable_embeddings=False)
-harvester.convert()
-```
+ID prefixes (`ark-NNNNN-`, `rutgers-lib:`, `stanford-`) are stripped for cleaner paths.
 
 ## Dependencies
 
-**Core** (pyproject.toml:6-11):
-- `pyarrow>=18.0.0` - Parquet file writing
-- `shapely>=2.0.0` - Geometry transformations
-- `geojson>=3.0.0` - GeoJSON validation
-- `model2vec>=0.3.0` - Static embedding model generation
-- `pyyaml>=6.0.0` - YAML config file parsing for repository list
+**Core:**
+- `pyarrow` - Parquet file writing
+- `shapely` - Geometry transformations
+- `model2vec` - Embedding generation
+- `rq`, `redis` - Job queue for derivatives
+- `pyvips` - Image processing (pyramidal TIFFs)
+- `requests`, `pillow` - File handling
 
-**Dev** (pyproject.toml:17-21):
-- `pytest>=8.0.0` - Testing framework
-- `pytest-cov>=6.0.0` - Coverage reporting
-- `ruff>=0.8.0` - Linting and formatting
+**External tools required:**
+- `ogr2ogr` (GDAL) - Vector format conversion
+- `tippecanoe` - PMTiles generation
+- Redis server - Job queue backend
+- Ollama - Text extraction (optional)
 
-**Distill** (optional, pyproject.toml:20-23):
-- `torch>=2.0.0` - PyTorch for model distillation
-- `sentence-transformers>=2.2.0` - Base model for distillation
-- Only needed if running distillation (not needed for inference)
+## Testing
+
+```bash
+# All tests
+uv run pytest
+
+# Specific module
+uv run pytest tests/test_derivatives.py
+
+# With coverage
+uv run pytest --cov
+
+# Verbose output
+uv run pytest -v
+```
+
+**Test files:**
+- `test_harvest.py` - Harvester tests
+- `test_geometry.py` - Geometry conversion tests
+- `test_embeddings.py` - Embedding generation tests
+- `test_enrichment.py` - Enrichment preparation tests
+- `test_text_extract.py` - Text extraction tests
+- `test_derivatives.py` - Derivatives processing tests
+
+## Common Operations
+
+### Reset and Reprocess Derivatives
+
+```bash
+# Check current status
+sqlite3 tmp/enrichment.db "SELECT status, COUNT(*) FROM cloud_derivatives GROUP BY status"
+
+# Reset failed jobs to unprocessed
+sqlite3 tmp/enrichment.db "UPDATE cloud_derivatives SET status='unprocessed' WHERE status='error'"
+
+# Reset all to reprocess
+sqlite3 tmp/enrichment.db "UPDATE cloud_derivatives SET status='unprocessed'"
+```
+
+### Monitor Redis Queue
+
+```bash
+# Check queue stats
+uv run ogm-enrich-derivatives --stats
+
+# Monitor in real-time
+uv run ogm-enrich-derivatives --monitor-only
+
+# Optional: Install rq-dashboard for web UI
+uv sync --extra monitor
+rq-dashboard --redis-url redis://localhost:6379
+```
+
+### Debug a Single Document
+
+```bash
+# Preview without processing
+uv run ogm-enrich-derivatives --dry-run --id "stanford-abc123"
+
+# Process single document
+uv run ogm-enrich-derivatives --id "stanford-abc123"
+```
 
 ## Common Gotchas
 
-1. ENVELOPE format uses order `(minx, maxx, maxy, miny)` - note that maxy comes before miny
-2. Invalid geometries return world extent `-180,-90,180,90` instead of failing
-3. Empty lists become None in Parquet schema (not empty arrays)
-4. The `references` field must be valid JSON string (not a dict)
-5. `index_year` field converts strings to floats, skips non-convertible values
-6. Test coverage configuration requires `--cov` flag to generate reports
+1. **Redis required** - Start with `docker compose up -d` before running derivatives
+2. **macOS fork safety** - Workers set `OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES` automatically
+3. **SQLite WAL mode** - Database uses WAL for concurrent access from multiple workers
+4. **ID prefixes stripped** - `stanford-abc123` becomes `abc123` in output paths
+5. **Retry logic** - Failed jobs are re-enqueued with exponential backoff (max 5 retries)
+6. **Status tracking** - Jobs marked `enqueued` won't be re-queued on restart

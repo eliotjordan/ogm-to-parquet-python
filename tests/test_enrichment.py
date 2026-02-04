@@ -414,8 +414,9 @@ class TestPrepareIntegration:
 
         results = preparer.prepare(docs)
 
-        # geo-1 and both-1 are eligible for cloud_derivatives
-        assert results["cloud_derivatives"] == 2
+        # Only geo-1 is eligible for cloud_derivatives
+        # (both-1 has IIIF which is in EXCLUDED_SERVICE_KEYS, so it's excluded)
+        assert results["cloud_derivatives"] == 1
         # img-1 and both-1 are eligible for text_extraction
         assert results["text_extraction"] == 2
 
