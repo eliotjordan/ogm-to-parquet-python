@@ -13,6 +13,7 @@ dependencies = [
 
 [project.scripts]
 ogm-harvest = "ogm_to_parquet.harvest:main"
+ogm-enrich-prepare = "ogm_to_parquet.enrichment:main"
 
 [project.optional-dependencies]
 dev = [
