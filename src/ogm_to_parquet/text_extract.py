@@ -185,7 +185,7 @@ class TextExtractor:
             else:
                 # Get all unprocessed documents
                 cursor.execute(
-                    "SELECT id, image_url FROM text_extraction WHERE status = 'unprocessed'"
+                    "SELECT id, image_url FROM text_extraction WHERE status = 'unprocessed' OR status = 'in_progress'"
                 )
                 documents = cursor.fetchall()
                 logger.info(f"Found {len(documents)} unprocessed documents")
