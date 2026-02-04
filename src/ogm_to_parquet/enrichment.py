@@ -24,6 +24,8 @@ EXCLUDED_SERVICE_KEYS = {
     "http://www.opengis.net/def/serviceType/ogc/wms",
     "http://www.opengis.net/def/serviceType/ogc/wmts",
     "https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames",
+    "http://iiif.io/api/presentation#manifest",
+    "http://iiif.io/api/image"
 }
 
 # Formats eligible for cloud derivative generation
