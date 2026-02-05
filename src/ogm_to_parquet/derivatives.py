@@ -12,7 +12,6 @@ import signal
 import sqlite3
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 from redis import Redis
@@ -43,8 +42,9 @@ class DerivativeProcessor:
     This class handles:
     - Loading documents from the database
     - Enqueueing jobs to RQ workers
-    - Monitoring queue progress
     - Managing worker processes
+
+    Use rq-dashboard for monitoring: rq-dashboard --redis-url redis://localhost:6379
     """
 
     def __init__(
@@ -296,35 +296,6 @@ class DerivativeProcessor:
             "failed": failed_registry.count,
         }
 
-    def monitor_progress(self, interval: float = 2.0) -> None:
-        """Print queue progress to console.
-
-        Args:
-            interval: Update interval in seconds
-        """
-        try:
-            while True:
-                stats = self.get_queue_stats()
-                total = stats["queued"] + stats["started"]
-
-                status_line = (
-                    f"\rQueued: {stats['queued']} | "
-                    f"Running: {stats['started']} | "
-                    f"Done: {stats['finished']} | "
-                    f"Failed: {stats['failed']}"
-                )
-                print(status_line, end="", flush=True)
-
-                # Exit when queue is empty and no jobs running
-                if total == 0 and stats["finished"] + stats["failed"] > 0:
-                    print()  # Newline
-                    logger.info("All jobs completed")
-                    break
-
-                time.sleep(interval)
-        except KeyboardInterrupt:
-            print("\nMonitoring stopped")
-
     def start_workers(self, count: int = DEFAULT_WORKERS) -> list[subprocess.Popen]:
         """Start RQ worker processes.
 
@@ -380,17 +351,18 @@ class DerivativeProcessor:
 
     def process_all(
         self, doc_id: str | None = None, workers: int = DEFAULT_WORKERS
-    ) -> dict:
+    ) -> list[subprocess.Popen]:
         """Run the full processing pipeline.
 
-        Starts workers, enqueues documents, monitors progress, then stops workers.
+        Enqueues documents and starts workers. Workers run until interrupted.
+        Use rq-dashboard for monitoring: rq-dashboard --redis-url redis://localhost:6379
 
         Args:
             doc_id: Optional specific document ID to process
             workers: Number of worker processes
 
         Returns:
-            Final queue statistics
+            List of worker Popen objects (caller should handle shutdown)
         """
         # Ensure database schema is up to date
         self.ensure_retry_column()
@@ -404,24 +376,15 @@ class DerivativeProcessor:
 
         if enqueued == 0 and total_pending == 0:
             logger.info("No jobs to process")
-            return {"queued": 0, "started": 0, "finished": 0, "failed": 0}
+            return []
 
         if total_pending > 0:
             logger.info(f"Found {total_pending} jobs in queue")
 
         # Start workers
-        worker_procs = self.start_workers(workers)
-
-        try:
-            # Monitor until complete
-            self.monitor_progress()
-        except KeyboardInterrupt:
-            print("\nInterrupted by user")
-        finally:
-            # Stop workers
-            self.stop_workers(worker_procs)
-
-        return self.get_queue_stats()
+        logger.info(f"Starting {workers} workers. Use rq-dashboard to monitor progress.")
+        logger.info("Press Ctrl+C to stop workers.")
+        return self.start_workers(workers)
 
 
 def check_redis_connection(redis_url: str) -> bool:
@@ -539,11 +502,6 @@ def main():
         help="Start workers for existing queue without enqueueing new jobs",
     )
     parser.add_argument(
-        "--monitor-only",
-        action="store_true",
-        help="Only monitor existing queue, don't enqueue or start workers",
-    )
-    parser.add_argument(
         "--stats",
         action="store_true",
         help="Print queue statistics and exit",
@@ -561,8 +519,8 @@ def main():
         logger.error("Cannot proceed without Redis connection")
         sys.exit(1)
 
-    # Check external tools (unless just monitoring/stats/dry-run)
-    if not args.monitor_only and not args.stats and not args.dry_run:
+    # Check external tools (unless just stats/dry-run)
+    if not args.stats and not args.dry_run:
         if not check_tools_available():
             logger.error("Cannot proceed without required tools")
             sys.exit(1)
@@ -609,16 +567,16 @@ def main():
             print(f"  Running:  {stats['started']}")
             print(f"  Finished: {stats['finished']}")
             print(f"  Failed:   {stats['failed']}")
-
-        elif args.monitor_only:
-            # Monitor existing queue
-            processor.monitor_progress()
+            print("\nUse rq-dashboard for real-time monitoring:")
+            print("  rq-dashboard --redis-url redis://localhost:6379")
 
         elif args.enqueue_only:
             # Just enqueue, don't start workers
             processor.ensure_retry_column()
             enqueued = processor.enqueue_documents(args.id)
             print(f"Enqueued {enqueued} jobs")
+            print("\nStart workers with: uv run ogm-enrich-derivatives --workers-only")
+            print("Monitor with: rq-dashboard --redis-url redis://localhost:6379")
 
         elif args.workers_only:
             # Start workers for existing queue without enqueueing
@@ -627,20 +585,32 @@ def main():
             if total_pending == 0:
                 print("No jobs in queue")
             else:
-                print(f"Starting workers for {total_pending} queued jobs")
+                print(f"Starting {args.workers} workers for {total_pending} queued jobs")
+                print("Monitor with: rq-dashboard --redis-url redis://localhost:6379")
+                print("Press Ctrl+C to stop workers.\n")
                 worker_procs = processor.start_workers(args.workers)
                 try:
-                    processor.monitor_progress()
+                    # Wait for interrupt
+                    for proc in worker_procs:
+                        proc.wait()
                 except KeyboardInterrupt:
-                    print("\nInterrupted by user")
-                finally:
+                    print("\nStopping workers...")
                     processor.stop_workers(worker_procs)
-                print(f"\nProcessing complete: {processor.get_queue_stats()}")
+                print(f"Final stats: {processor.get_queue_stats()}")
 
         else:
-            # Full processing: enqueue + workers + monitor
-            results = processor.process_all(doc_id=args.id, workers=args.workers)
-            print(f"\nProcessing complete: {results}")
+            # Full processing: enqueue + workers
+            print("Monitor with: rq-dashboard --redis-url redis://localhost:6379")
+            worker_procs = processor.process_all(doc_id=args.id, workers=args.workers)
+            if worker_procs:
+                try:
+                    # Wait for interrupt
+                    for proc in worker_procs:
+                        proc.wait()
+                except KeyboardInterrupt:
+                    print("\nStopping workers...")
+                    processor.stop_workers(worker_procs)
+                print(f"Final stats: {processor.get_queue_stats()}")
 
     except KeyboardInterrupt:
         print("\nInterrupted by user. Exiting.")

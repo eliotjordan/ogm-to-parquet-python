@@ -82,7 +82,7 @@ Creates `tmp/enrichment.db` with two tables:
 Converts vector files to PMTiles and images to pyramidal TIFFs using RQ job queue:
 
 ```bash
-# Full processing (enqueue + workers + monitor)
+# Full processing (enqueue + start workers)
 uv run ogm-enrich-derivatives
 
 # Start workers for existing queue (after restart)
@@ -94,9 +94,6 @@ uv run ogm-enrich-derivatives --dry-run
 # Just enqueue jobs (run workers separately)
 uv run ogm-enrich-derivatives --enqueue-only
 
-# Monitor existing queue
-uv run ogm-enrich-derivatives --monitor-only
-
 # Print queue statistics
 uv run ogm-enrich-derivatives --stats
 
@@ -105,6 +102,9 @@ uv run ogm-enrich-derivatives --id "stanford-abc123"
 
 # Custom settings
 uv run ogm-enrich-derivatives --workers 4 --delay 2.0 --tippecanoe-timeout 3600
+
+# Monitor with rq-dashboard (web UI)
+rq-dashboard --redis-url redis://localhost:6379
 ```
 
 **Requires Redis** - Start with `docker compose up -d`
@@ -139,8 +139,9 @@ uv run ogm-enrich-extract --ollama-url http://localhost:11434 --model qwen2.5-vl
 
 **src/ogm_to_parquet/derivatives.py** - Derivative processing orchestration:
 - `DerivativeProcessor` class manages RQ job queue
-- Starts workers, monitors progress, handles graceful shutdown
+- Starts workers, handles graceful shutdown
 - Uses Redis for job queue (requires `docker compose up -d`)
+- Use rq-dashboard for monitoring: `rq-dashboard --redis-url redis://localhost:6379`
 
 **src/ogm_to_parquet/derivative_jobs.py** - RQ job functions:
 - `process_derivative()` - Main job function for workers
@@ -244,14 +245,10 @@ sqlite3 tmp/enrichment.db "UPDATE cloud_derivatives SET status='unprocessed'"
 ### Monitor Redis Queue
 
 ```bash
-# Check queue stats
+# Check queue stats (snapshot)
 uv run ogm-enrich-derivatives --stats
 
-# Monitor in real-time
-uv run ogm-enrich-derivatives --monitor-only
-
-# Optional: Install rq-dashboard for web UI
-uv sync --extra monitor
+# Real-time monitoring with rq-dashboard (web UI at http://localhost:9181)
 rq-dashboard --redis-url redis://localhost:6379
 ```
 

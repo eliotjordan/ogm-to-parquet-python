@@ -82,7 +82,7 @@ uv run ogm-enrich-prepare
 Converts vector files to PMTiles and images to pyramidal TIFFs using a Redis-backed job queue.
 
 ```bash
-# Full processing (enqueue + workers + monitor)
+# Full processing (enqueue + start workers)
 uv run ogm-enrich-derivatives
 
 # Start workers for existing queue (after restart)
@@ -93,9 +93,6 @@ uv run ogm-enrich-derivatives --dry-run
 
 # Just enqueue, run workers separately
 uv run ogm-enrich-derivatives --enqueue-only
-
-# Monitor queue progress
-uv run ogm-enrich-derivatives --monitor-only
 
 # Check queue statistics
 uv run ogm-enrich-derivatives --stats
@@ -109,6 +106,9 @@ uv run ogm-enrich-derivatives \
   --delay 2.0 \
   --tippecanoe-timeout 3600 \
   --max-retries 5
+
+# Monitor with rq-dashboard (web UI at http://localhost:9181)
+rq-dashboard --redis-url redis://localhost:6379
 ```
 
 **Processing:**
@@ -145,11 +145,11 @@ uv run ogm-enrich-extract --model qwen2.5-vl:32b
 ## Development
 
 ```bash
-# Run tests
-uv run pytest
+# Run tests with coverage (recommended - avoids segfault on macOS)
+./scripts/run_tests.sh
 
-# Run with coverage
-uv run pytest --cov
+# Run tests (may segfault on macOS due to C library conflicts)
+uv run pytest
 
 # Run specific test file
 uv run pytest tests/test_derivatives.py
@@ -237,14 +237,10 @@ sqlite3 tmp/enrichment.db "UPDATE cloud_derivatives SET status='unprocessed'"
 ### Monitor Redis Queue
 
 ```bash
-# Queue statistics
+# Queue statistics (snapshot)
 uv run ogm-enrich-derivatives --stats
 
-# Real-time monitoring
-uv run ogm-enrich-derivatives --monitor-only
-
-# Web dashboard (optional)
-uv sync --extra monitor
+# Real-time monitoring with rq-dashboard (web UI at http://localhost:9181)
 rq-dashboard --redis-url redis://localhost:6379
 ```
 

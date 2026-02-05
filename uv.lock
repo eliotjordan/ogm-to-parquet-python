@@ -890,6 +890,7 @@ dependencies = [
     { name = "redis" },
     { name = "requests" },
     { name = "rq" },
+    { name = "rq-dashboard" },
     { name = "shapely" },
 ]
 
@@ -902,9 +903,6 @@ dev = [
 distill = [
     { name = "sentence-transformers" },
     { name = "torch" },
-]
-monitor = [
-    { name = "rq-dashboard" },
 ]
 
 [package.metadata]
@@ -920,13 +918,13 @@ requires-dist = [
     { name = "redis", specifier = ">=5.0.0" },
     { name = "requests", specifier = ">=2.31.0" },
     { name = "rq", specifier = ">=1.16.0" },
-    { name = "rq-dashboard", marker = "extra == 'monitor'", specifier = ">=0.7.0" },
+    { name = "rq-dashboard", specifier = ">=0.7.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8.0" },
     { name = "sentence-transformers", marker = "extra == 'distill'", specifier = ">=2.2.0" },
     { name = "shapely", specifier = ">=2.0.0" },
     { name = "torch", marker = "extra == 'distill'", specifier = ">=2.0.0" },
 ]
-provides-extras = ["dev", "distill", "monitor"]
+provides-extras = ["dev", "distill"]
 
 [[package]]
 name = "packaging"
