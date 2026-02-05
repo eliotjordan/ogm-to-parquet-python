@@ -1,113 +1,157 @@
 # OpenGeoMetadata to Parquet Converter (Python)
 
-Python implementation of the OpenGeoMetadata to Parquet converter. This tool processes OpenGeoMetadata JSON files and converts them into a single Parquet file optimized for querying with DuckDB.
+Python implementation of the OpenGeoMetadata to Parquet converter with enrichment pipelines. This tool:
+
+1. **Harvests** OpenGeoMetadata JSON files into a Parquet file with semantic embeddings
+2. **Generates cloud derivatives** - converts vector data to PMTiles and images to pyramidal TIFFs
+3. **Extracts text** from map images using vision AI models
 
 ## Requirements
 
 - Python 3.11+
 - uv (for package management)
+- Docker (for Redis)
+- GDAL (ogr2ogr) and tippecanoe (for derivatives)
+- Ollama (optional, for text extraction)
 
 ## Installation
 
 ```bash
-# Install dependencies (includes model2vec for embedding generation)
+# Install dependencies
 uv sync --all-extras
 
-# Install with distillation support (adds torch and sentence-transformers)
-# Required for generating custom embedding models
-uv sync --extra distill
+# Start Redis (required for derivatives processing)
+docker compose up -d
 ```
 
-## Usage
+## Quick Start
 
 ```bash
-# Run with default settings (128 dims, 10K vocab, ~29MB model)
-uv run ogm-harvest
-
-# Generate a small model (~8 MB, good for web)
-uv run ogm-harvest --embedding-dims 64 --max-vocab-size 2000
-
-# Generate a tiny model (~5 MB, for mobile)
-uv run ogm-harvest --embedding-dims 32 --max-vocab-size 1000
-
-# Generate a large model (~35 MB, best quality)
-uv run ogm-harvest --embedding-dims 256 --max-vocab-size 10000
-
-# Disable embeddings entirely
-uv run ogm-harvest --no-embeddings
-
-# Or run the module directly
-uv run python -m ogm_to_parquet.harvest
-```
-
-### Downlaod OGM metadata
-
-```
-# Download OpenGeoMetadata repositories and harvest
+# 1. Download and harvest OGM metadata
 uv run ogm-harvest --download
 
-# Download using custom repos config
-uv run ogm-harvest --download --repos-config my-repos.yaml
+# 2. Prepare enrichment tasks
+uv run ogm-enrich-prepare
 
-# Download to custom directory
-uv run ogm-harvest --download --ogm-path ./data/opengeometadata
+# 3. Process derivatives (vector → PMTiles, images → pyramidal TIFFs)
+uv run ogm-enrich-derivatives
 
-# Download only (skip harvesting)
-uv run ogm-harvest --download-only
+# 4. Extract text from map images (requires Ollama)
+uv run ogm-enrich-extract
 ```
 
-### Embedding Generation
+## Commands
 
-The harvester automatically generates semantic embeddings for each document:
+### ogm-harvest - Convert OGM to Parquet
 
-1. **Vocabulary Building**: Extracts vocabulary from metadata fields
-   - Controlled vocabulary: creator, location, provider, resource_class, subject, theme, format
-   - Free-text terms: title, description, publisher (common terms extracted)
-   - Configurable size: 1K to 10K+ terms
+Converts OpenGeoMetadata JSON files to a queryable Parquet file with semantic embeddings.
 
-2. **Model Distillation**: Creates a small, browser-compatible model
-   - Distills `sentence-transformers/all-MiniLM-L6-v2`
-   - Custom vocabulary ensures good domain coverage
-   - Configurable dimensions: 32, 64, 128, or 256
-   - Outputs saved to `tmp/ogm-model/`
+```bash
+# Download OGM repositories and harvest
+uv run ogm-harvest --download
 
-3. **Document Embedding**: Generates embedding vectors for each record
-   - Saved in `embeddings` field in Parquet file
-   - Suitable for semantic search in DuckDB or browser
+# Harvest only (from existing tmp/opengeometadata/)
+uv run ogm-harvest
 
-### Model Sizes
+# Custom embedding model size
+uv run ogm-harvest --embedding-dims 64 --max-vocab-size 2000
 
-| Configuration | Model Size | Quality | Use Case |
-|--------------|------------|---------|----------|
-| 32 dims, 1K vocab | ~5 MB | Good | Mobile apps |
-| 64 dims, 2K vocab | ~8 MB | Very Good | Web apps (recommended) |
-| 128 dims, 5K vocab | ~15 MB | Excellent | Default |
-| 256 dims, 10K vocab | ~35 MB | Best | Desktop apps |
-
-See `examples_model_sizes.md` for detailed configuration examples.
-
-### Disabling Embeddings
-
-To skip embedding generation:
-
-```python
-from ogm_to_parquet.harvest import OgmToParquet
-
-harvester = OgmToParquet(enable_embeddings=False)
-harvester.convert()
+# Without embeddings
+uv run ogm-harvest --no-embeddings
 ```
+
+**Outputs:**
+- `tmp/ogm.parquet` - Harvested metadata with embeddings
+- `tmp/ogm-model/` - Distilled embedding model for browser use
+
+### ogm-enrich-prepare - Prepare Enrichment Tasks
+
+Scans harvested documents and creates enrichment tasks in SQLite databases.
+
+```bash
+uv run ogm-enrich-prepare
+```
+
+**Outputs:**
+- `tmp/derivatives.db` - `cloud_derivatives` table for vector/image files to convert
+- `tmp/text_extraction.db` - `text_extraction` table for images for OCR
+
+### ogm-enrich-derivatives - Process Cloud Derivatives
+
+Converts vector files to PMTiles and images to pyramidal TIFFs using a Redis-backed job queue.
+
+```bash
+# Full processing (enqueue + start workers)
+uv run ogm-enrich-derivatives
+
+# Start workers for existing queue (after restart)
+uv run ogm-enrich-derivatives --workers-only
+
+# Preview without processing
+uv run ogm-enrich-derivatives --dry-run
+
+# Just enqueue, run workers separately
+uv run ogm-enrich-derivatives --enqueue-only
+
+# Check queue statistics
+uv run ogm-enrich-derivatives --stats
+
+# Process single document
+uv run ogm-enrich-derivatives --id "stanford-abc123"
+
+# Custom settings
+uv run ogm-enrich-derivatives \
+  --workers 4 \
+  --delay 2.0 \
+  --tippecanoe-timeout 3600 \
+  --max-retries 5
+
+# Monitor with rq-dashboard (web UI at http://localhost:9181)
+rq-dashboard --redis-url redis://localhost:6379
+```
+
+**Processing:**
+- **Vector formats** (GeoJSON, Shapefile, GeoPackage, KML):
+  - ogr2ogr → FlatGeobuf (reprojected to EPSG:4326)
+  - tippecanoe → PMTiles
+- **Image formats** (JPEG, JPEG2000, TIFF):
+  - pyvips → Pyramidal TIFF (JPEG compression, 1024x1024 tiles, Q=90)
+
+**Outputs:**
+```
+tmp/cloud_derivatives/
+  ab/c1/23/abc123def/dataset.pmtiles   # Vector
+  pn/86/3f/pn863fv0810/dataset.tif     # Image
+```
+
+### ogm-enrich-extract - Extract Text from Maps
+
+Uses Ollama vision models to extract text from map images.
+
+```bash
+# Process all pending images
+uv run ogm-enrich-extract
+
+# Process single document
+uv run ogm-enrich-extract --id "doc123"
+
+# Custom model
+uv run ogm-enrich-extract --model qwen2.5-vl:32b
+```
+
+**Requires:** Ollama running with a vision model (e.g., `qwen2.5-vl:32b`)
 
 ## Development
 
 ```bash
-# Run tests
+# Run tests with coverage (recommended - avoids segfault on macOS)
+./scripts/run_tests.sh
+
+# Run tests (may segfault on macOS due to C library conflicts)
 uv run pytest
 
-# Run tests with coverage
-uv run pytest --cov
-
 # Run specific test file
-uv run pytest tests/test_geometry.py
+uv run pytest tests/test_derivatives.py
 
 # Lint code
 uv run ruff check src tests
@@ -116,163 +160,146 @@ uv run ruff check src tests
 uv run ruff format src tests
 ```
 
-### Continuous Integration
-
-The project uses GitHub Actions for CI:
-- **Linting**: Runs ruff linter and formatter checks
-- **Testing**: Runs full test suite on Python 3.11 and 3.12 with coverage
-- **Compatibility**: Verifies tests work without optional distillation dependencies
-
 ## Project Structure
 
 ```
 src/ogm_to_parquet/
-├── __init__.py          # Package initialization
-├── geometry.py          # Geometry transformation utilities
-└── harvest.py           # Main harvester script
+├── harvest.py          # OGM JSON → Parquet conversion
+├── embeddings.py       # Semantic embedding generation
+├── geometry.py         # WKT/ENVELOPE → GeoJSON conversion
+├── download.py         # OGM repository download
+├── enrichment.py       # Enrichment task preparation
+├── derivatives.py      # Derivative processing orchestration
+├── derivative_jobs.py  # RQ job functions (ogr2ogr, tippecanoe, pyvips)
+└── text_extract.py     # Vision AI text extraction
 
 tests/
-├── test_geometry.py     # Geometry module tests
-└── test_harvest.py      # Harvest module tests
+├── test_harvest.py
+├── test_geometry.py
+├── test_embeddings.py
+├── test_enrichment.py
+├── test_derivatives.py
+└── test_text_extract.py
 ```
 
-## How It Works
+## Database Schema
 
-1. Reads OpenGeoMetadata JSON files from `tmp/opengeometadata/`
-2. Builds custom vocabulary from all documents (controlled vocab + extracted terms)
-3. Distills embedding model with custom vocabulary (saved to `tmp/ogm-model/`)
-4. For each document:
-   - Transforms field names from GeoBlacklight schema to simplified schema
-   - Converts geometries from WKT/ENVELOPE to GeoJSON
-   - Extracts thumbnail URLs from references field
-   - Generates 256-dimensional embedding vector
-5. Writes data to `tmp/ogm.parquet` with ZSTD compression
+Enrichment tasks are tracked in two separate databases:
 
-The generated Parquet file includes:
-- **geojson** (string): GeoJSON text representation for compatibility
-- **embeddings** (float32[]): 256-dim embedding vectors for semantic search
-- All standard metadata fields (title, creator, subject, etc.)
+**tmp/derivatives.db:**
+```sql
+CREATE TABLE cloud_derivatives (
+    id TEXT PRIMARY KEY,
+    download_url TEXT,
+    format TEXT,           -- GeoJSON, Shapefile, JPEG, etc.
+    derivative_url TEXT,   -- Output path when complete
+    status TEXT,           -- unprocessed, enqueued, in_progress, complete, error
+    error_message TEXT,
+    retry_count INTEGER
+);
+```
 
-## Testing
+**tmp/text_extraction.db:**
+```sql
+CREATE TABLE text_extraction (
+    id TEXT PRIMARY KEY,
+    image_url TEXT,
+    format TEXT,           -- IIIF, JPEG, TIFF
+    generated_output TEXT, -- JSON with extracted text
+    status TEXT,           -- unprocessed, in_progress, complete, error
+    error_message TEXT
+);
+```
 
-The project includes comprehensive tests with pytest and coverage reporting:
+**Status flow:** `unprocessed` → `enqueued` → `in_progress` → `complete`/`error`
 
-- **74 tests total** covering geometry, harvest, and embeddings modules
-- **High overall coverage**
-  - geometry.py: 98% coverage
-  - harvest.py: 93% coverage
-  - embeddings.py: 60% coverage (core logic tested; distillation tests optional)
+## Common Operations
+
+### Check Processing Status
 
 ```bash
-# Run tests
-uv run pytest
+# Derivatives status
+sqlite3 tmp/derivatives.db "SELECT status, COUNT(*) FROM cloud_derivatives GROUP BY status"
 
-# Run with coverage report
-uv run pytest --cov
-
-# Generate HTML coverage report
-uv run pytest --cov-report=html
-
-# Run specific test file
-uv run pytest tests/test_geometry.py
-
-# Run tests matching pattern
-uv run pytest -k "envelope"
-
-# Run distillation tests (requires torch and sentence-transformers)
-uv sync --extra distill
-uv run pytest tests/test_embeddings.py
+# Text extraction status
+sqlite3 tmp/text_extraction.db "SELECT status, COUNT(*) FROM text_extraction GROUP BY status"
 ```
 
-## Output Files
+### Reset Failed Jobs
 
-### Parquet Data (`tmp/ogm.parquet`)
+```bash
+# Reset failed derivatives
+sqlite3 tmp/derivatives.db "UPDATE cloud_derivatives SET status='unprocessed' WHERE status='error'"
 
-The harvester generates a single Parquet file with all metadata and embeddings:
-- **geojson**: Text GeoJSON for display and compatibility
-- **embeddings**: 256-dim float32 vectors for semantic search
-- All standard metadata fields
+# Reset all derivatives
+sqlite3 tmp/derivatives.db "UPDATE cloud_derivatives SET status='unprocessed'"
 
-### Embedding Model (`tmp/ogm-model/`)
+# Reset failed text extraction
+sqlite3 tmp/text_extraction.db "UPDATE text_extraction SET status='unprocessed' WHERE status='error'"
+```
 
-The distilled Model2Vec model for browser use:
-- **tokenizer.json**: HuggingFace tokenizer (load with tokenizers.js)
-- **embeddings.safetensors**: Embedding matrix in safetensors format
-- **embeddings.bin**: Raw float32 binary (simpler browser loading)
-- **metadata.json**: Vocab size, embedding dimensions, base model info
+### Monitor Redis Queue
 
-### Using with DuckDB
+```bash
+# Queue statistics (snapshot)
+uv run ogm-enrich-derivatives --stats
 
-To query with DuckDB spatial functions:
+# Real-time monitoring with rq-dashboard (web UI at http://localhost:9181)
+rq-dashboard --redis-url redis://localhost:6379
+```
+
+## Using with DuckDB
+
+Query the harvested Parquet file:
+
 ```sql
--- Query by bounding box
-SELECT * FROM 'ogm.parquet'
-WHERE ST_Intersects(
-  ST_GeomFromWKB(geometry),
-  ST_MakeEnvelope(-122.5, 37.7, -122.0, 37.8)
-);
-
--- Or use the geojson field
-SELECT * FROM 'ogm.parquet'
+-- Search by location
+SELECT * FROM 'tmp/ogm.parquet'
 WHERE ST_Intersects(
   ST_GeomFromGeoJSON(geojson),
   ST_MakeEnvelope(-122.5, 37.7, -122.0, 37.8)
 );
+
+-- Semantic search (using embeddings)
+SELECT title,
+       list_cosine_similarity(embeddings, $query_embedding) as score
+FROM 'tmp/ogm.parquet'
+ORDER BY score DESC
+LIMIT 10;
 ```
 
-## Using Embeddings in the Browser
+## Browser Integration
 
-The distilled model can be loaded in JavaScript for client-side semantic search:
+The distilled embedding model (`tmp/ogm-model/`) can be loaded in JavaScript for client-side semantic search:
 
 ```javascript
 import { Tokenizer } from "@huggingface/tokenizers";
 
-// Load model assets (once on startup)
-const tokenizer = await Tokenizer.from_pretrained("./tmp/ogm-model/tokenizer.json");
+// Load model
+const tokenizer = await Tokenizer.from_pretrained("./ogm-model/tokenizer.json");
+const response = await fetch("./ogm-model/embeddings.bin");
+const embeddingMatrix = new Float32Array(await response.arrayBuffer());
 
-// Load embedding matrix as Float32Array
-const response = await fetch("./tmp/ogm-model/embeddings.bin");
-const buffer = await response.arrayBuffer();
-const embeddingMatrix = new Float32Array(buffer);
-const EMBEDDING_DIM = 256;
-
-// Generate query embedding
+// Encode query
 function encodeQuery(text) {
-  const encoded = tokenizer.encode(text);
-  const tokenIds = encoded.ids;
-
-  // Average token embeddings
-  const sum = new Float32Array(EMBEDDING_DIM);
-  for (const id of tokenIds) {
-    const offset = id * EMBEDDING_DIM;
-    for (let i = 0; i < EMBEDDING_DIM; i++) {
-      sum[i] += embeddingMatrix[offset + i];
+  const tokens = tokenizer.encode(text).ids;
+  const embedding = new Float32Array(256);
+  for (const id of tokens) {
+    for (let i = 0; i < 256; i++) {
+      embedding[i] += embeddingMatrix[id * 256 + i];
     }
   }
-
-  // Normalize
-  for (let i = 0; i < EMBEDDING_DIM; i++) {
-    sum[i] /= tokenIds.length;
-  }
-
-  return sum;
+  return embedding.map(v => v / tokens.length);
 }
-
-// Compute cosine similarity with document embeddings
-const queryEmbedding = encodeQuery("water resources california");
-// Compare with document embeddings from Parquet file
 ```
-
-No neural network inference required - just tokenization and vector math. The entire model loads in milliseconds and runs efficiently in the browser.
 
 ## Differences from Ruby Version
 
-This Python implementation extends the Ruby version with:
+This Python implementation adds:
 
-1. **Semantic embedding generation** using Model2Vec (new feature)
-2. Comprehensive test suite (74 tests vs 0)
-3. Type hints throughout for better IDE support
-4. Modern package management with uv
-5. Better error handling and logging
-6. Easier cross-platform setup
-7. Well-documented code with docstrings
+1. **Semantic embeddings** with Model2Vec
+2. **Cloud derivatives pipeline** (PMTiles, pyramidal TIFFs)
+3. **Text extraction** from map images
+4. Comprehensive test suite (100+ tests)
+5. Type hints throughout
+6. Modern tooling (uv, ruff, pytest)
