@@ -174,9 +174,7 @@ class TextExtractor:
 
             if doc_id:
                 # Process specific document by ID (regardless of status)
-                cursor.execute(
-                    "SELECT id, image_url FROM text_extraction WHERE id = ?", (doc_id,)
-                )
+                cursor.execute("SELECT id, image_url FROM text_extraction WHERE id = ?", (doc_id,))
                 documents = cursor.fetchall()
                 if not documents:
                     logger.warning(f"Document {doc_id} not found in text_extraction table")
@@ -255,9 +253,7 @@ class TextExtractor:
             extracted_json = self._extract_text_with_retry(image_path)
             if extracted_json is None:
                 self._cleanup_file(image_path)
-                self._mark_error(
-                    conn, doc_id, "Failed to extract text after maximum retries"
-                )
+                self._mark_error(conn, doc_id, "Failed to extract text after maximum retries")
                 return "error"
 
             # Save result

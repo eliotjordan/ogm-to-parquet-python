@@ -166,10 +166,7 @@ class DerivativeProcessor:
                 )
 
             rows = cursor.fetchall()
-            return [
-                {"id": row[0], "download_url": row[1], "format": row[2]}
-                for row in rows
-            ]
+            return [{"id": row[0], "download_url": row[1], "format": row[2]} for row in rows]
         finally:
             conn.close()
 

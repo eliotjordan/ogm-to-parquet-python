@@ -54,9 +54,9 @@ def clean_doc_id(doc_id: str) -> str:
 
     # Patterns to strip (prefix patterns that precede unique identifiers)
     prefix_patterns = [
-        r"^ark-\d+-",      # ark-85335-xxxxx
+        r"^ark-\d+-",  # ark-85335-xxxxx
         r"^rutgers-lib:",  # rutgers-lib:xxxxx
-        r"^stanford-",     # stanford-xxxxx
+        r"^stanford-",  # stanford-xxxxx
     ]
 
     cleaned = doc_id
@@ -156,7 +156,7 @@ def extract_archive(archive_path: Path, extract_dir: Path) -> Path | None:
         # Look for data.zip
         zip_files = list(extract_dir.rglob("*.zip"))
         if zip_files:
-            data_path = extract_dir / 'unzipped-data'
+            data_path = extract_dir / "unzipped-data"
             with zipfile.ZipFile(zip_files[0], "r") as zf:
                 zf.extractall(data_path)
             return data_path
@@ -222,9 +222,7 @@ def convert_to_flatgeobuf(input_path: Path, output_path: Path) -> bool:
         return False
 
 
-def convert_to_pmtiles(
-    input_path: Path, output_path: Path, timeout: int = 1800
-) -> bool:
+def convert_to_pmtiles(input_path: Path, output_path: Path, timeout: int = 1800) -> bool:
     """Convert FlatGeobuf to PMTiles using tippecanoe.
 
     First tries with -zg flag for automatic zoom detection.
@@ -255,9 +253,7 @@ def convert_to_pmtiles(
     ]
 
     try:
-        result = subprocess.run(
-            cmd_with_zg, capture_output=True, text=True, timeout=timeout
-        )
+        result = subprocess.run(cmd_with_zg, capture_output=True, text=True, timeout=timeout)
         if result.returncode == 0:
             return True
 
@@ -283,9 +279,7 @@ def convert_to_pmtiles(
     ]
 
     try:
-        result = subprocess.run(
-            cmd_no_zg, capture_output=True, text=True, timeout=timeout
-        )
+        result = subprocess.run(cmd_no_zg, capture_output=True, text=True, timeout=timeout)
         if result.returncode != 0:
             logger.error(f"tippecanoe fallback failed: {result.stderr}")
             return False
@@ -395,7 +389,9 @@ def update_status(
                 conn.commit()
                 rows_affected = cursor.rowcount
                 if rows_affected == 0:
-                    logger.warning(f"[{doc_id}] No row found in database to update status to '{status}'")
+                    logger.warning(
+                        f"[{doc_id}] No row found in database to update status to '{status}'"
+                    )
                     return False
                 logger.debug(f"[{doc_id}] Status updated to '{status}'")
                 return True
@@ -403,7 +399,7 @@ def update_status(
                 conn.close()
         except sqlite3.OperationalError as e:
             if "locked" in str(e) and attempt < max_retries - 1:
-                sleep_time = (2 ** attempt) * 0.1  # Exponential backoff
+                sleep_time = (2**attempt) * 0.1  # Exponential backoff
                 logger.warning(f"Database locked, retrying in {sleep_time:.1f}s...")
                 time.sleep(sleep_time)
             else:
@@ -440,7 +436,7 @@ def increment_retry_count(db_path: str, doc_id: str, max_retries: int = 5) -> in
                 conn.close()
         except sqlite3.OperationalError as e:
             if "locked" in str(e) and attempt < max_retries - 1:
-                sleep_time = (2 ** attempt) * 0.1
+                sleep_time = (2**attempt) * 0.1
                 logger.warning(f"Database locked, retrying in {sleep_time:.1f}s...")
                 time.sleep(sleep_time)
             else:

@@ -302,7 +302,9 @@ class TestMarkError:
         extractor_with_db._mark_error(conn, "test-doc")
 
         cursor = conn.cursor()
-        cursor.execute("SELECT status, error_message FROM text_extraction WHERE id = ?", ("test-doc",))
+        cursor.execute(
+            "SELECT status, error_message FROM text_extraction WHERE id = ?", ("test-doc",)
+        )
         row = cursor.fetchone()
         conn.close()
 
@@ -315,7 +317,9 @@ class TestMarkError:
         extractor_with_db._mark_error(conn, "test-doc", "Download failed: 404 Not Found")
 
         cursor = conn.cursor()
-        cursor.execute("SELECT status, error_message FROM text_extraction WHERE id = ?", ("test-doc",))
+        cursor.execute(
+            "SELECT status, error_message FROM text_extraction WHERE id = ?", ("test-doc",)
+        )
         row = cursor.fetchone()
         conn.close()
 

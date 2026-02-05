@@ -26,16 +26,9 @@ class TestGenerateOutputPath:
 
     def test_standard_id(self, tmp_path):
         """Test path generation with standard 32-char ID."""
-        output = generate_output_path(
-            tmp_path, "060c078970f84019a0c0426016c9d151", ".pmtiles"
-        )
+        output = generate_output_path(tmp_path, "060c078970f84019a0c0426016c9d151", ".pmtiles")
         expected = (
-            tmp_path
-            / "06"
-            / "0c"
-            / "07"
-            / "060c078970f84019a0c0426016c9d151"
-            / "dataset.pmtiles"
+            tmp_path / "06" / "0c" / "07" / "060c078970f84019a0c0426016c9d151" / "dataset.pmtiles"
         )
         assert output == expected
 
@@ -94,7 +87,9 @@ class TestCleanDocId:
 
     def test_no_prefix_unchanged(self):
         """Test that IDs without recognized prefixes are unchanged."""
-        assert clean_doc_id("060c078970f84019a0c0426016c9d151") == "060c078970f84019a0c0426016c9d151"
+        assert (
+            clean_doc_id("060c078970f84019a0c0426016c9d151") == "060c078970f84019a0c0426016c9d151"
+        )
 
     def test_partial_match_unchanged(self):
         """Test that partial matches are not stripped."""
@@ -237,7 +232,9 @@ class TestDatabaseOperations:
 
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        cursor.execute("SELECT status, derivative_url FROM cloud_derivatives WHERE id = ?", ("test123",))
+        cursor.execute(
+            "SELECT status, derivative_url FROM cloud_derivatives WHERE id = ?", ("test123",)
+        )
         row = cursor.fetchone()
         conn.close()
 
@@ -250,7 +247,9 @@ class TestDatabaseOperations:
 
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        cursor.execute("SELECT status, error_message FROM cloud_derivatives WHERE id = ?", ("test123",))
+        cursor.execute(
+            "SELECT status, error_message FROM cloud_derivatives WHERE id = ?", ("test123",)
+        )
         row = cursor.fetchone()
         conn.close()
 
@@ -375,9 +374,7 @@ class TestProcessDerivative:
         # Update test record to image format
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        cursor.execute(
-            "UPDATE cloud_derivatives SET format = 'JPEG' WHERE id = 'test123'"
-        )
+        cursor.execute("UPDATE cloud_derivatives SET format = 'JPEG' WHERE id = 'test123'")
         conn.commit()
         conn.close()
 
