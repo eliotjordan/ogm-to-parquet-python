@@ -67,15 +67,15 @@ uv run ogm-harvest --no-embeddings
 
 ### ogm-enrich-prepare - Prepare Enrichment Tasks
 
-Scans harvested documents and populates the enrichment database with tasks:
+Scans harvested documents and populates enrichment databases with tasks:
 
 ```bash
 uv run ogm-enrich-prepare
 ```
 
-Creates `tmp/enrichment.db` with two tables:
-- `cloud_derivatives` - Vector/image files to convert
-- `text_extraction` - Images for OCR text extraction
+Creates two databases:
+- `tmp/derivatives.db` - `cloud_derivatives` table for vector/image files to convert
+- `tmp/text_extraction.db` - `text_extraction` table for images for OCR
 
 ### ogm-enrich-derivatives - Process Cloud Derivatives
 
@@ -134,8 +134,8 @@ uv run ogm-enrich-extract --ollama-url http://localhost:11434 --model qwen2.5-vl
 
 **src/ogm_to_parquet/enrichment.py** - Enrichment preparation:
 - Filters documents for cloud derivatives and text extraction
-- Populates SQLite database with tasks
-- Outputs `tmp/enrichment.db`
+- Populates separate SQLite databases for each task type
+- Outputs `tmp/derivatives.db` and `tmp/text_extraction.db`
 
 **src/ogm_to_parquet/derivatives.py** - Derivative processing orchestration:
 - `DerivativeProcessor` class manages RQ job queue
@@ -153,9 +153,9 @@ uv run ogm-enrich-extract --ollama-url http://localhost:11434 --model qwen2.5-vl
 - Downloads map images, processes with Ollama vision model
 - Extracts categorized text (titles, legends, place names, etc.)
 
-### Database Schema (enrichment.db)
+### Database Schema
 
-**cloud_derivatives table:**
+**derivatives.db - cloud_derivatives table:**
 ```sql
 CREATE TABLE cloud_derivatives (
     id TEXT PRIMARY KEY,
@@ -165,6 +165,18 @@ CREATE TABLE cloud_derivatives (
     status TEXT,              -- unprocessed, enqueued, in_progress, complete, error
     error_message TEXT,
     retry_count INTEGER
+);
+```
+
+**text_extraction.db - text_extraction table:**
+```sql
+CREATE TABLE text_extraction (
+    id TEXT PRIMARY KEY,
+    image_url TEXT,
+    format TEXT,              -- IIIF, JPEG, TIFF
+    generated_output TEXT,    -- JSON with extracted text
+    status TEXT,              -- unprocessed, in_progress, complete, error
+    error_message TEXT
 );
 ```
 
@@ -233,13 +245,23 @@ uv run pytest -v
 
 ```bash
 # Check current status
-sqlite3 tmp/enrichment.db "SELECT status, COUNT(*) FROM cloud_derivatives GROUP BY status"
+sqlite3 tmp/derivatives.db "SELECT status, COUNT(*) FROM cloud_derivatives GROUP BY status"
 
 # Reset failed jobs to unprocessed
-sqlite3 tmp/enrichment.db "UPDATE cloud_derivatives SET status='unprocessed' WHERE status='error'"
+sqlite3 tmp/derivatives.db "UPDATE cloud_derivatives SET status='unprocessed' WHERE status='error'"
 
 # Reset all to reprocess
-sqlite3 tmp/enrichment.db "UPDATE cloud_derivatives SET status='unprocessed'"
+sqlite3 tmp/derivatives.db "UPDATE cloud_derivatives SET status='unprocessed'"
+```
+
+### Reset and Reprocess Text Extraction
+
+```bash
+# Check current status
+sqlite3 tmp/text_extraction.db "SELECT status, COUNT(*) FROM text_extraction GROUP BY status"
+
+# Reset failed jobs to unprocessed
+sqlite3 tmp/text_extraction.db "UPDATE text_extraction SET status='unprocessed' WHERE status='error'"
 ```
 
 ### Monitor Redis Queue

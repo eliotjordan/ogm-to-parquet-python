@@ -66,16 +66,15 @@ uv run ogm-harvest --no-embeddings
 
 ### ogm-enrich-prepare - Prepare Enrichment Tasks
 
-Scans harvested documents and creates enrichment tasks in SQLite database.
+Scans harvested documents and creates enrichment tasks in SQLite databases.
 
 ```bash
 uv run ogm-enrich-prepare
 ```
 
 **Outputs:**
-- `tmp/enrichment.db` - SQLite database with:
-  - `cloud_derivatives` table - vector/image files to convert
-  - `text_extraction` table - images for OCR
+- `tmp/derivatives.db` - `cloud_derivatives` table for vector/image files to convert
+- `tmp/text_extraction.db` - `text_extraction` table for images for OCR
 
 ### ogm-enrich-derivatives - Process Cloud Derivatives
 
@@ -185,10 +184,10 @@ tests/
 
 ## Database Schema
 
-The enrichment database (`tmp/enrichment.db`) tracks processing status:
+Enrichment tasks are tracked in two separate databases:
 
+**tmp/derivatives.db:**
 ```sql
--- Derivatives processing
 CREATE TABLE cloud_derivatives (
     id TEXT PRIMARY KEY,
     download_url TEXT,
@@ -198,14 +197,16 @@ CREATE TABLE cloud_derivatives (
     error_message TEXT,
     retry_count INTEGER
 );
+```
 
--- Text extraction
+**tmp/text_extraction.db:**
+```sql
 CREATE TABLE text_extraction (
     id TEXT PRIMARY KEY,
     image_url TEXT,
     format TEXT,           -- IIIF, JPEG, TIFF
     generated_output TEXT, -- JSON with extracted text
-    status TEXT,
+    status TEXT,           -- unprocessed, in_progress, complete, error
     error_message TEXT
 );
 ```
@@ -218,20 +219,23 @@ CREATE TABLE text_extraction (
 
 ```bash
 # Derivatives status
-sqlite3 tmp/enrichment.db "SELECT status, COUNT(*) FROM cloud_derivatives GROUP BY status"
+sqlite3 tmp/derivatives.db "SELECT status, COUNT(*) FROM cloud_derivatives GROUP BY status"
 
 # Text extraction status
-sqlite3 tmp/enrichment.db "SELECT status, COUNT(*) FROM text_extraction GROUP BY status"
+sqlite3 tmp/text_extraction.db "SELECT status, COUNT(*) FROM text_extraction GROUP BY status"
 ```
 
 ### Reset Failed Jobs
 
 ```bash
 # Reset failed derivatives
-sqlite3 tmp/enrichment.db "UPDATE cloud_derivatives SET status='unprocessed' WHERE status='error'"
+sqlite3 tmp/derivatives.db "UPDATE cloud_derivatives SET status='unprocessed' WHERE status='error'"
 
 # Reset all derivatives
-sqlite3 tmp/enrichment.db "UPDATE cloud_derivatives SET status='unprocessed'"
+sqlite3 tmp/derivatives.db "UPDATE cloud_derivatives SET status='unprocessed'"
+
+# Reset failed text extraction
+sqlite3 tmp/text_extraction.db "UPDATE text_extraction SET status='unprocessed' WHERE status='error'"
 ```
 
 ### Monitor Redis Queue

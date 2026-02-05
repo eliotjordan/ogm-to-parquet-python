@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 QUEUE_NAME = "derivatives"
 
 # Default settings
-DEFAULT_DB_PATH = "./tmp/enrichment.db"
+DEFAULT_DB_PATH = "./tmp/derivatives.db"
 DEFAULT_SCRATCH_DIR = "./tmp/scratch"
 DEFAULT_OUTPUT_DIR = "./tmp/cloud_derivatives"
 DEFAULT_REDIS_URL = "redis://localhost:6379"

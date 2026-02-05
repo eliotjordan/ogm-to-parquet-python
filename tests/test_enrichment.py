@@ -19,31 +19,32 @@ class TestEnrichmentPreparer:
 
     @pytest.fixture
     def preparer(self, tmp_path):
-        """Create an EnrichmentPreparer with a temporary database path."""
-        db_path = tmp_path / "test_enrichment.db"
-        return EnrichmentPreparer(db_path=str(db_path))
-
-    @pytest.fixture
-    def db_connection(self, preparer):
-        """Set up database and return connection."""
-        preparer.setup_database()
-        conn = sqlite3.connect(preparer.db_path)
-        yield conn
-        conn.close()
+        """Create an EnrichmentPreparer with temporary database paths."""
+        derivatives_db = tmp_path / "derivatives.db"
+        text_extraction_db = tmp_path / "text_extraction.db"
+        return EnrichmentPreparer(
+            derivatives_db_path=str(derivatives_db),
+            text_extraction_db_path=str(text_extraction_db),
+        )
 
     def test_initialization(self, tmp_path):
-        """Test preparer initialization with custom path."""
-        db_path = tmp_path / "custom.db"
-        preparer = EnrichmentPreparer(db_path=str(db_path))
-        assert preparer.db_path == db_path
+        """Test preparer initialization with custom paths."""
+        derivatives_db = tmp_path / "custom_derivatives.db"
+        text_extraction_db = tmp_path / "custom_text.db"
+        preparer = EnrichmentPreparer(
+            derivatives_db_path=str(derivatives_db),
+            text_extraction_db_path=str(text_extraction_db),
+        )
+        assert preparer.derivatives_db_path == derivatives_db
+        assert preparer.text_extraction_db_path == text_extraction_db
 
-    def test_setup_database_creates_tables(self, preparer):
-        """Test that setup_database creates the required tables."""
-        result = preparer.setup_database()
+    def test_setup_derivatives_database_creates_table(self, preparer):
+        """Test that setup_derivatives_database creates the required table."""
+        result = preparer.setup_derivatives_database()
         assert result is True
-        assert preparer.db_path.exists()
+        assert preparer.derivatives_db_path.exists()
 
-        conn = sqlite3.connect(preparer.db_path)
+        conn = sqlite3.connect(preparer.derivatives_db_path)
         cursor = conn.cursor()
 
         # Check cloud_derivatives table exists
@@ -51,26 +52,42 @@ class TestEnrichmentPreparer:
             "SELECT name FROM sqlite_master WHERE type='table' AND name='cloud_derivatives'"
         )
         assert cursor.fetchone() is not None
+        conn.close()
+
+    def test_setup_text_extraction_database_creates_table(self, preparer):
+        """Test that setup_text_extraction_database creates the required table."""
+        result = preparer.setup_text_extraction_database()
+        assert result is True
+        assert preparer.text_extraction_db_path.exists()
+
+        conn = sqlite3.connect(preparer.text_extraction_db_path)
+        cursor = conn.cursor()
 
         # Check text_extraction table exists
         cursor.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='text_extraction'"
         )
         assert cursor.fetchone() is not None
-
         conn.close()
 
     def test_setup_database_skips_existing(self, preparer):
-        """Test that setup_database returns False for existing database."""
-        preparer.setup_database()
-        result = preparer.setup_database()
+        """Test that setup methods return False for existing databases."""
+        preparer.setup_derivatives_database()
+        result = preparer.setup_derivatives_database()
         assert result is False
 
-    def test_cloud_derivatives_table_schema(self, db_connection):
+        preparer.setup_text_extraction_database()
+        result = preparer.setup_text_extraction_database()
+        assert result is False
+
+    def test_cloud_derivatives_table_schema(self, preparer):
         """Test cloud_derivatives table has correct columns."""
-        cursor = db_connection.cursor()
+        preparer.setup_derivatives_database()
+        conn = sqlite3.connect(preparer.derivatives_db_path)
+        cursor = conn.cursor()
         cursor.execute("PRAGMA table_info(cloud_derivatives)")
         columns = {row[1]: row[2] for row in cursor.fetchall()}
+        conn.close()
 
         assert "id" in columns
         assert "download_url" in columns
@@ -79,11 +96,14 @@ class TestEnrichmentPreparer:
         assert "status" in columns
         assert "error_message" in columns
 
-    def test_text_extraction_table_schema(self, db_connection):
+    def test_text_extraction_table_schema(self, preparer):
         """Test text_extraction table has correct columns."""
-        cursor = db_connection.cursor()
+        preparer.setup_text_extraction_database()
+        conn = sqlite3.connect(preparer.text_extraction_db_path)
+        cursor = conn.cursor()
         cursor.execute("PRAGMA table_info(text_extraction)")
         columns = {row[1]: row[2] for row in cursor.fetchall()}
+        conn.close()
 
         assert "id" in columns
         assert "image_url" in columns
@@ -98,9 +118,13 @@ class TestCloudDerivativesFiltering:
 
     @pytest.fixture
     def preparer(self, tmp_path):
-        """Create an EnrichmentPreparer with a temporary database path."""
-        db_path = tmp_path / "test_enrichment.db"
-        return EnrichmentPreparer(db_path=str(db_path))
+        """Create an EnrichmentPreparer with temporary database paths."""
+        derivatives_db = tmp_path / "derivatives.db"
+        text_extraction_db = tmp_path / "text_extraction.db"
+        return EnrichmentPreparer(
+            derivatives_db_path=str(derivatives_db),
+            text_extraction_db_path=str(text_extraction_db),
+        )
 
     def _make_doc(
         self,
@@ -126,7 +150,7 @@ class TestCloudDerivativesFiltering:
 
         assert results["cloud_derivatives"] == 1
 
-        conn = sqlite3.connect(preparer.db_path)
+        conn = sqlite3.connect(preparer.derivatives_db_path)
         cursor = conn.cursor()
         cursor.execute(
             "SELECT id, download_url, format, status FROM cloud_derivatives WHERE id = ?",
@@ -154,7 +178,7 @@ class TestCloudDerivativesFiltering:
 
         assert results["cloud_derivatives"] == 1
 
-        conn = sqlite3.connect(preparer.db_path)
+        conn = sqlite3.connect(preparer.derivatives_db_path)
         cursor = conn.cursor()
         cursor.execute("SELECT download_url FROM cloud_derivatives WHERE id = ?", ("test-array",))
         row = cursor.fetchone()
@@ -225,9 +249,13 @@ class TestTextExtractionFiltering:
 
     @pytest.fixture
     def preparer(self, tmp_path):
-        """Create an EnrichmentPreparer with a temporary database path."""
-        db_path = tmp_path / "test_enrichment.db"
-        return EnrichmentPreparer(db_path=str(db_path))
+        """Create an EnrichmentPreparer with temporary database paths."""
+        derivatives_db = tmp_path / "derivatives.db"
+        text_extraction_db = tmp_path / "text_extraction.db"
+        return EnrichmentPreparer(
+            derivatives_db_path=str(derivatives_db),
+            text_extraction_db_path=str(text_extraction_db),
+        )
 
     def _make_doc(
         self,
@@ -253,7 +281,7 @@ class TestTextExtractionFiltering:
 
         assert results["text_extraction"] == 1
 
-        conn = sqlite3.connect(preparer.db_path)
+        conn = sqlite3.connect(preparer.text_extraction_db_path)
         cursor = conn.cursor()
         cursor.execute(
             "SELECT id, image_url, format, status FROM text_extraction WHERE id = ?", ("test-123",)
@@ -275,7 +303,7 @@ class TestTextExtractionFiltering:
 
         assert results["text_extraction"] == 1
 
-        conn = sqlite3.connect(preparer.db_path)
+        conn = sqlite3.connect(preparer.text_extraction_db_path)
         cursor = conn.cursor()
         cursor.execute(
             "SELECT id, image_url, format FROM text_extraction WHERE id = ?", ("test-TIFF",)
@@ -334,8 +362,12 @@ class TestParseReferences:
     @pytest.fixture
     def preparer(self, tmp_path):
         """Create an EnrichmentPreparer."""
-        db_path = tmp_path / "test.db"
-        return EnrichmentPreparer(db_path=str(db_path))
+        derivatives_db = tmp_path / "derivatives.db"
+        text_extraction_db = tmp_path / "text_extraction.db"
+        return EnrichmentPreparer(
+            derivatives_db_path=str(derivatives_db),
+            text_extraction_db_path=str(text_extraction_db),
+        )
 
     def test_parse_string_json(self, preparer):
         """Test parsing JSON string."""
@@ -371,8 +403,12 @@ class TestPrepareIntegration:
     @pytest.fixture
     def preparer(self, tmp_path):
         """Create an EnrichmentPreparer."""
-        db_path = tmp_path / "test.db"
-        return EnrichmentPreparer(db_path=str(db_path))
+        derivatives_db = tmp_path / "derivatives.db"
+        text_extraction_db = tmp_path / "text_extraction.db"
+        return EnrichmentPreparer(
+            derivatives_db_path=str(derivatives_db),
+            text_extraction_db_path=str(text_extraction_db),
+        )
 
     def test_prepare_multiple_documents(self, preparer):
         """Test preparing multiple documents at once."""
@@ -420,11 +456,13 @@ class TestPrepareIntegration:
         # img-1 and both-1 are eligible for text_extraction
         assert results["text_extraction"] == 2
 
-    def test_prepare_creates_database_if_not_exists(self, preparer):
-        """Test that prepare creates database if it doesn't exist."""
-        assert not preparer.db_path.exists()
+    def test_prepare_creates_databases_if_not_exist(self, preparer):
+        """Test that prepare creates databases if they don't exist."""
+        assert not preparer.derivatives_db_path.exists()
+        assert not preparer.text_extraction_db_path.exists()
         preparer.prepare([])
-        assert preparer.db_path.exists()
+        assert preparer.derivatives_db_path.exists()
+        assert preparer.text_extraction_db_path.exists()
 
 
 class TestGenerateImageUrl:
@@ -433,63 +471,67 @@ class TestGenerateImageUrl:
     @pytest.fixture
     def preparer(self, tmp_path):
         """Create an EnrichmentPreparer."""
-        db_path = tmp_path / "test.db"
-        return EnrichmentPreparer(db_path=str(db_path))
+        derivatives_db = tmp_path / "derivatives.db"
+        text_extraction_db = tmp_path / "text_extraction.db"
+        return EnrichmentPreparer(
+            derivatives_db_path=str(derivatives_db),
+            text_extraction_db_path=str(text_extraction_db),
+        )
 
     def test_iiif_url_with_info_json(self, preparer):
         """Test IIIF URL transformation when ending with info.json."""
-        references = {IIIF_IMAGE_KEY: "https://example.com/iiif/image123/info.json"}
-        result = preparer._generate_image_url(references)
-        assert result == "https://example.com/iiif/image123/full/full/0/default.jpg"
+        refs = {IIIF_IMAGE_KEY: "https://example.com/iiif/image/info.json"}
+        result = preparer._generate_image_url(refs)
+        assert result == "https://example.com/iiif/image/full/full/0/default.jpg"
 
     def test_iiif_url_without_info_json(self, preparer):
         """Test IIIF URL transformation when not ending with info.json."""
-        references = {IIIF_IMAGE_KEY: "https://example.com/iiif/image123"}
-        result = preparer._generate_image_url(references)
-        assert result == "https://example.com/iiif/image123/full/full/0/default.jpg"
+        refs = {IIIF_IMAGE_KEY: "https://example.com/iiif/image"}
+        result = preparer._generate_image_url(refs)
+        assert result == "https://example.com/iiif/image/full/full/0/default.jpg"
 
     def test_iiif_url_with_trailing_slash(self, preparer):
         """Test IIIF URL transformation with trailing slash."""
-        references = {IIIF_IMAGE_KEY: "https://example.com/iiif/image123/"}
-        result = preparer._generate_image_url(references)
-        assert result == "https://example.com/iiif/image123/full/full/0/default.jpg"
+        refs = {IIIF_IMAGE_KEY: "https://example.com/iiif/image/"}
+        result = preparer._generate_image_url(refs)
+        assert result == "https://example.com/iiif/image/full/full/0/default.jpg"
 
     def test_download_url_used_when_no_iiif(self, preparer):
-        """Test download URL is used when IIIF is not available."""
-        references = {DOWNLOAD_URL_KEY: "https://example.com/images/photo.tiff"}
-        result = preparer._generate_image_url(references)
-        assert result == "https://example.com/images/photo.tiff"
+        """Test that download URL is used when no IIIF reference."""
+        refs = {DOWNLOAD_URL_KEY: "https://example.com/image.jpg"}
+        result = preparer._generate_image_url(refs)
+        assert result == "https://example.com/image.jpg"
 
     def test_iiif_preferred_over_download_url(self, preparer):
-        """Test that IIIF is preferred when both are available."""
-        references = {
+        """Test that IIIF is preferred over download URL."""
+        refs = {
             IIIF_IMAGE_KEY: "https://example.com/iiif/info.json",
-            DOWNLOAD_URL_KEY: "https://example.com/download/image.tiff",
+            DOWNLOAD_URL_KEY: "https://example.com/image.jpg",
         }
-        result = preparer._generate_image_url(references)
+        result = preparer._generate_image_url(refs)
         assert result == "https://example.com/iiif/full/full/0/default.jpg"
 
     def test_returns_none_when_no_suitable_reference(self, preparer):
-        """Test returns None when neither IIIF nor download URL is present."""
-        references = {"http://schema.org/url": "https://example.com/page"}
-        result = preparer._generate_image_url(references)
+        """Test that None is returned when no suitable reference."""
+        refs = {"http://schema.org/url": "https://example.com/page"}
+        result = preparer._generate_image_url(refs)
         assert result is None
 
     def test_returns_none_for_empty_references(self, preparer):
-        """Test returns None for empty references dict."""
+        """Test that None is returned for empty references."""
         result = preparer._generate_image_url({})
         assert result is None
 
     def test_download_url_as_array_of_objects(self, preparer):
-        """Test download URL extraction from array of objects format."""
-        references = {
+        """Test download URL extraction from array of objects."""
+        refs = {
             DOWNLOAD_URL_KEY: [
-                {"url": "https://example.com/first.zip", "label": "Shapefile"},
-                {"url": "https://example.com/second.kmz", "label": "KMZ"},
+                {"url": "https://example.com/first.jpg", "label": "Full"},
+                {"url": "https://example.com/second.jpg", "label": "Thumb"},
             ]
         }
-        result = preparer._generate_image_url(references)
-        assert result == "https://example.com/first.zip"
+        result = preparer._generate_image_url(refs)
+        assert result == "https://example.com/first.jpg"
 
 
 class TestExtractDownloadUrl:
@@ -498,8 +540,12 @@ class TestExtractDownloadUrl:
     @pytest.fixture
     def preparer(self, tmp_path):
         """Create an EnrichmentPreparer."""
-        db_path = tmp_path / "test.db"
-        return EnrichmentPreparer(db_path=str(db_path))
+        derivatives_db = tmp_path / "derivatives.db"
+        text_extraction_db = tmp_path / "text_extraction.db"
+        return EnrichmentPreparer(
+            derivatives_db_path=str(derivatives_db),
+            text_extraction_db_path=str(text_extraction_db),
+        )
 
     def test_string_value(self, preparer):
         """Test extraction from string value."""
@@ -507,37 +553,37 @@ class TestExtractDownloadUrl:
         assert result == "https://example.com/file.zip"
 
     def test_array_of_objects_first_url(self, preparer):
-        """Test extraction from array of objects takes first URL."""
+        """Test extraction from array of objects returns first URL."""
         value = [
-            {"url": "https://example.com/first.zip", "label": "Shapefile"},
-            {"url": "https://example.com/second.kmz", "label": "KMZ"},
+            {"url": "https://example.com/first.zip", "label": "First"},
+            {"url": "https://example.com/second.zip", "label": "Second"},
         ]
         result = preparer._extract_download_url(value)
         assert result == "https://example.com/first.zip"
 
     def test_array_with_single_object(self, preparer):
         """Test extraction from array with single object."""
-        value = [{"url": "https://example.com/only.zip", "label": "Data"}]
+        value = [{"url": "https://example.com/only.zip"}]
         result = preparer._extract_download_url(value)
         assert result == "https://example.com/only.zip"
 
     def test_empty_array_returns_none(self, preparer):
-        """Test empty array returns None."""
+        """Test that empty array returns None."""
         result = preparer._extract_download_url([])
         assert result is None
 
     def test_array_without_url_key_returns_none(self, preparer):
-        """Test array of objects without 'url' key returns None."""
-        value = [{"label": "Shapefile", "format": "shp"}]
+        """Test that array object without 'url' key returns None."""
+        value = [{"href": "https://example.com/file.zip"}]
         result = preparer._extract_download_url(value)
         assert result is None
 
     def test_none_value_returns_none(self, preparer):
-        """Test None value returns None."""
+        """Test that None value returns None."""
         result = preparer._extract_download_url(None)
         assert result is None
 
     def test_invalid_type_returns_none(self, preparer):
-        """Test invalid type returns None."""
+        """Test that invalid type returns None."""
         result = preparer._extract_download_url(12345)
         assert result is None

@@ -19,7 +19,7 @@ class TestTextExtractorInit:
     def test_default_initialization(self, tmp_path):
         """Test default initialization values."""
         extractor = TextExtractor()
-        assert extractor.db_path == Path("./tmp/enrichment.db")
+        assert extractor.db_path == Path("./tmp/text_extraction.db")
         assert extractor.scratch_dir == Path("./tmp/scratch")
         assert extractor.ollama_url == "http://localhost:11434"
         assert extractor.model == "qwen3-vl:30b"

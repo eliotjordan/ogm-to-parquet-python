@@ -1,6 +1,6 @@
 """Enrichment preparation for OpenGeoMetadata documents.
 
-Creates and populates SQLite tables for tracking cloud derivative generation
+Creates and populates SQLite databases for tracking cloud derivative generation
 and text extraction tasks.
 """
 
@@ -38,41 +38,46 @@ IMAGE_FORMATS = {"JPEG", "JPEG2000", "TIFF"}
 DOWNLOAD_URL_KEY = "http://schema.org/downloadUrl"
 IIIF_IMAGE_KEY = "http://iiif.io/api/image"
 
+# Default database paths
+DEFAULT_DERIVATIVES_DB = "./tmp/derivatives.db"
+DEFAULT_TEXT_EXTRACTION_DB = "./tmp/text_extraction.db"
+
 
 class EnrichmentPreparer:
-    """Prepares enrichment tasks by populating SQLite tracking tables."""
+    """Prepares enrichment tasks by populating SQLite tracking databases."""
 
     def __init__(
         self,
-        db_path: str = "./tmp/enrichment.db",
+        derivatives_db_path: str = DEFAULT_DERIVATIVES_DB,
+        text_extraction_db_path: str = DEFAULT_TEXT_EXTRACTION_DB,
     ):
         """Initialize the enrichment preparer.
 
         Args:
-            db_path: Path to SQLite database file
+            derivatives_db_path: Path to derivatives SQLite database
+            text_extraction_db_path: Path to text extraction SQLite database
         """
-        self.db_path = Path(db_path)
+        self.derivatives_db_path = Path(derivatives_db_path)
+        self.text_extraction_db_path = Path(text_extraction_db_path)
 
-    def setup_database(self) -> bool:
-        """Create the SQLite database and tables if they don't exist.
+    def setup_derivatives_database(self) -> bool:
+        """Create the derivatives database and table if they don't exist.
 
         Returns:
             True if database was created, False if it already existed
         """
-        db_existed = self.db_path.exists()
+        db_existed = self.derivatives_db_path.exists()
 
         if db_existed:
-            logger.info(f"Database already exists: {self.db_path}")
+            logger.info(f"Derivatives database already exists: {self.derivatives_db_path}")
             return False
 
         # Ensure parent directory exists
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self.derivatives_db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.derivatives_db_path)
         try:
             cursor = conn.cursor()
-
-            # Create cloud_derivatives table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS cloud_derivatives (
                     id TEXT PRIMARY KEY,
@@ -83,8 +88,30 @@ class EnrichmentPreparer:
                     error_message TEXT
                 )
             """)
+            conn.commit()
+            logger.info(f"Created derivatives database: {self.derivatives_db_path}")
+            return True
+        finally:
+            conn.close()
 
-            # Create text_extraction table
+    def setup_text_extraction_database(self) -> bool:
+        """Create the text extraction database and table if they don't exist.
+
+        Returns:
+            True if database was created, False if it already existed
+        """
+        db_existed = self.text_extraction_db_path.exists()
+
+        if db_existed:
+            logger.info(f"Text extraction database already exists: {self.text_extraction_db_path}")
+            return False
+
+        # Ensure parent directory exists
+        self.text_extraction_db_path.parent.mkdir(parents=True, exist_ok=True)
+
+        conn = sqlite3.connect(self.text_extraction_db_path)
+        try:
+            cursor = conn.cursor()
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS text_extraction (
                     id TEXT PRIMARY KEY,
@@ -95,9 +122,8 @@ class EnrichmentPreparer:
                     error_message TEXT
                 )
             """)
-
             conn.commit()
-            logger.info(f"Created database with tables: {self.db_path}")
+            logger.info(f"Created text extraction database: {self.text_extraction_db_path}")
             return True
         finally:
             conn.close()
@@ -105,8 +131,8 @@ class EnrichmentPreparer:
     def prepare(self, documents: list[dict[str, Any]]) -> dict[str, int]:
         """Prepare enrichment tasks from documents.
 
-        Populates the cloud_derivatives and text_extraction tables based on
-        document filtering criteria.
+        Populates the cloud_derivatives and text_extraction tables in their
+        respective databases based on document filtering criteria.
 
         Args:
             documents: List of Aardvark JSON documents
@@ -114,20 +140,28 @@ class EnrichmentPreparer:
         Returns:
             Dictionary with counts of inserted records per table
         """
-        # Ensure database exists
-        self.setup_database()
+        # Ensure databases exist
+        self.setup_derivatives_database()
+        self.setup_text_extraction_database()
 
-        conn = sqlite3.connect(self.db_path)
+        # Populate derivatives database
+        derivatives_conn = sqlite3.connect(self.derivatives_db_path)
         try:
-            cloud_derivatives_count = self._populate_cloud_derivatives(conn, documents)
-            text_extraction_count = self._populate_text_extraction(conn, documents)
-
-            return {
-                "cloud_derivatives": cloud_derivatives_count,
-                "text_extraction": text_extraction_count,
-            }
+            cloud_derivatives_count = self._populate_cloud_derivatives(derivatives_conn, documents)
         finally:
-            conn.close()
+            derivatives_conn.close()
+
+        # Populate text extraction database
+        text_conn = sqlite3.connect(self.text_extraction_db_path)
+        try:
+            text_extraction_count = self._populate_text_extraction(text_conn, documents)
+        finally:
+            text_conn.close()
+
+        return {
+            "cloud_derivatives": cloud_derivatives_count,
+            "text_extraction": text_extraction_count,
+        }
 
     def _populate_cloud_derivatives(
         self, conn: sqlite3.Connection, documents: list[dict[str, Any]]
@@ -363,14 +397,24 @@ def main():
 
     from .harvest import OgmToParquet
 
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+
     parser = argparse.ArgumentParser(
         description="Prepare enrichment tasks from OpenGeoMetadata documents"
     )
     parser.add_argument(
-        "--db-path",
+        "--derivatives-db",
         type=str,
-        default="./tmp/enrichment.db",
-        help="Path to SQLite database (default: ./tmp/enrichment.db)",
+        default=DEFAULT_DERIVATIVES_DB,
+        help=f"Path to derivatives SQLite database (default: {DEFAULT_DERIVATIVES_DB})",
+    )
+    parser.add_argument(
+        "--text-extraction-db",
+        type=str,
+        default=DEFAULT_TEXT_EXTRACTION_DB,
+        help=f"Path to text extraction SQLite database (default: {DEFAULT_TEXT_EXTRACTION_DB})",
     )
     parser.add_argument(
         "--ogm-path",
@@ -387,14 +431,14 @@ def main():
     logger.info(f"Collected {len(documents)} valid Aardvark documents")
 
     # Prepare enrichment
-    preparer = EnrichmentPreparer(db_path=args.db_path)
+    preparer = EnrichmentPreparer(
+        derivatives_db_path=args.derivatives_db,
+        text_extraction_db_path=args.text_extraction_db,
+    )
     results = preparer.prepare(documents)
 
     logger.info(f"Enrichment preparation complete: {results}")
 
 
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
     main()

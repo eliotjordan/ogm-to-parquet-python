@@ -82,7 +82,7 @@ class TextExtractor:
 
     def __init__(
         self,
-        db_path: str = "./tmp/enrichment.db",
+        db_path: str = "./tmp/text_extraction.db",
         scratch_dir: str = "./tmp/scratch",
         ollama_url: str = "http://localhost:11434",
         model: str = "qwen3-vl:30b",
@@ -601,8 +601,8 @@ def main():
     parser.add_argument(
         "--db-path",
         type=str,
-        default="./tmp/enrichment.db",
-        help="Path to SQLite database (default: ./tmp/enrichment.db)",
+        default="./tmp/text_extraction.db",
+        help="Path to SQLite database (default: ./tmp/text_extraction.db)",
     )
     parser.add_argument(
         "--scratch-dir",
