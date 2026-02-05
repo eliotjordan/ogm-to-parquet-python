@@ -153,6 +153,14 @@ def extract_archive(archive_path: Path, extract_dir: Path) -> Path | None:
         if shp_files:
             return shp_files[0]
 
+        # Look for data.zip
+        zip_files = list(extract_dir.rglob("*.zip"))
+        if zip_files:
+            data_path = extract_dir / 'unzipped-data'
+            with zipfile.ZipFile(zip_files[0], "r") as zf:
+                zf.extractall(data_path)
+            return data_path
+
         # Look for other vector formats
         for ext in VECTOR_EXTENSIONS:
             files = list(extract_dir.rglob(f"*{ext}"))
