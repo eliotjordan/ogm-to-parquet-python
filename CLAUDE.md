@@ -200,18 +200,23 @@ ID prefixes (`ark-NNNNN-`, `rutgers-lib:`, `stanford-`) are stripped for cleaner
 ## Testing
 
 ```bash
-# All tests
+# All tests with coverage (recommended - avoids segfault on macOS)
+./scripts/run_tests.sh
+
+# All tests (may segfault on macOS due to C library conflicts)
 uv run pytest
 
 # Specific module
 uv run pytest tests/test_derivatives.py
 
-# With coverage
+# With coverage (single group)
 uv run pytest --cov
 
 # Verbose output
 uv run pytest -v
 ```
+
+**Note:** On macOS, running all tests together can cause a segfault due to C library conflicts between pyvips and model2vec. Use `./scripts/run_tests.sh` to run tests in separate groups while preserving combined coverage.
 
 **Test files:**
 - `test_harvest.py` - Harvester tests
