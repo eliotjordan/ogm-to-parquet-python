@@ -631,13 +631,20 @@ def main():
         help="Request timeout in seconds (default: 300)",
     )
     parser.add_argument(
-        "--id",
+        "--doc-id",
         type=str,
         default=None,
         help="Process only this document ID (processes regardless of current status)",
     )
 
     args = parser.parse_args()
+
+    # Check database exists
+    db_path = Path(args.db_path)
+    if not db_path.exists():
+        print(f"Error: Text extraction database not found: {db_path}")
+        print("Run 'uv run ogm-enrich-prepare' to create the database first.")
+        sys.exit(1)
 
     extractor = TextExtractor(
         db_path=args.db_path,
@@ -649,7 +656,7 @@ def main():
     )
 
     try:
-        results = extractor.process_all(doc_id=args.id)
+        results = extractor.process_all(doc_id=args.doc_id)
         print(f"Extraction complete: {results}")
     except KeyboardInterrupt:
         print("\nInterrupted by user. Exiting.")

@@ -22,6 +22,7 @@ ogm-harvest = "ogm_to_parquet.harvest:main"
 ogm-enrich-prepare = "ogm_to_parquet.enrichment:main"
 ogm-enrich-extract = "ogm_to_parquet.text_extract:main"
 ogm-enrich-derivatives = "ogm_to_parquet.derivatives:main"
+ogm-status = "ogm_to_parquet.status:main"
 
 [project.optional-dependencies]
 dev = [

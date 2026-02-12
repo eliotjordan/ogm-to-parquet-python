@@ -262,13 +262,13 @@ class TestOgmToParquet:
         # Verify embeddings field exists (may be None if embeddings disabled)
         assert "embeddings" in row
 
-    def test_collect_documents_empty_directory(self, harvester):
+    def testcollect_documents_empty_directory(self, harvester):
         """Test collecting documents from empty directory."""
-        docs = harvester._collect_documents()
+        docs = harvester.collect_documents()
 
         assert docs == []
 
-    def test_collect_documents_with_json_files(self, harvester, tmp_path):
+    def testcollect_documents_with_json_files(self, harvester, tmp_path):
         """Test collecting documents from directory with JSON files."""
         ogm_path = tmp_path / "opengeometadata"
         ogm_path.mkdir(exist_ok=True)
@@ -284,13 +284,13 @@ class TestOgmToParquet:
         (subdir / "doc2.json").write_text(json.dumps(doc2))
 
         harvester = OgmToParquet(str(ogm_path), str(tmp_path / "output.parquet"))
-        docs = harvester._collect_documents()
+        docs = harvester.collect_documents()
 
         assert len(docs) == 2
         ids = {doc["id"] for doc in docs}
         assert ids == {"doc1", "doc2"}
 
-    def test_collect_documents_invalid_json(self, harvester, tmp_path, caplog):
+    def testcollect_documents_invalid_json(self, harvester, tmp_path, caplog):
         """Test collecting documents handles invalid JSON gracefully."""
         ogm_path = tmp_path / "opengeometadata"
         ogm_path.mkdir(exist_ok=True)
@@ -304,7 +304,7 @@ class TestOgmToParquet:
         )
 
         harvester = OgmToParquet(str(ogm_path), str(tmp_path / "output.parquet"))
-        docs = harvester._collect_documents()
+        docs = harvester.collect_documents()
 
         # Should collect only valid document
         assert len(docs) == 1
@@ -381,7 +381,7 @@ class TestOgmToParquet:
         assert harvester.rows[0]["id"] == "good-123"
         assert output_path.exists()
 
-    def test_collect_documents_skips_non_dict_json(self, tmp_path):
+    def testcollect_documents_skips_non_dict_json(self, tmp_path):
         """Test that non-dict JSON documents are skipped."""
         ogm_path = tmp_path / "opengeometadata"
         output_path = tmp_path / "output.parquet"
@@ -399,7 +399,7 @@ class TestOgmToParquet:
         )
 
         harvester = OgmToParquet(str(ogm_path), str(output_path))
-        docs = harvester._collect_documents()
+        docs = harvester.collect_documents()
 
         # Should only collect the valid dict document
         assert len(docs) == 1
@@ -430,7 +430,7 @@ class TestOgmToParquet:
         assert harvester.rows[0]["id"] == "valid-123"
         assert output_path.exists()
 
-    def test_collect_documents_skips_non_aardvark(self, tmp_path):
+    def testcollect_documents_skips_non_aardvark(self, tmp_path):
         """Test that documents without gbl_mdVersion_s=Aardvark are skipped."""
         ogm_path = tmp_path / "opengeometadata"
         output_path = tmp_path / "output.parquet"
@@ -448,13 +448,13 @@ class TestOgmToParquet:
         )
 
         harvester = OgmToParquet(str(ogm_path), str(output_path))
-        docs = harvester._collect_documents()
+        docs = harvester.collect_documents()
 
         # Should only collect the Aardvark document
         assert len(docs) == 1
         assert docs[0]["id"] == "valid-123"
 
-    def test_collect_documents_skips_missing_id(self, tmp_path):
+    def testcollect_documents_skips_missing_id(self, tmp_path):
         """Test that documents without id field are skipped."""
         ogm_path = tmp_path / "opengeometadata"
         output_path = tmp_path / "output.parquet"
@@ -476,13 +476,13 @@ class TestOgmToParquet:
         )
 
         harvester = OgmToParquet(str(ogm_path), str(output_path))
-        docs = harvester._collect_documents()
+        docs = harvester.collect_documents()
 
         # Should only collect document with valid id
         assert len(docs) == 1
         assert docs[0]["id"] == "valid-123"
 
-    def test_collect_documents_deduplicates_by_id(self, tmp_path):
+    def testcollect_documents_deduplicates_by_id(self, tmp_path):
         """Test that duplicate documents with same id are deduplicated."""
         ogm_path = tmp_path / "opengeometadata"
         output_path = tmp_path / "output.parquet"
@@ -525,7 +525,7 @@ class TestOgmToParquet:
         )
 
         harvester = OgmToParquet(str(ogm_path), str(output_path))
-        docs = harvester._collect_documents()
+        docs = harvester.collect_documents()
 
         # Should only have 2 documents (one duplicate skipped)
         assert len(docs) == 2

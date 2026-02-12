@@ -394,6 +394,7 @@ class EnrichmentPreparer:
 def main():
     """Command-line entry point for enrichment preparation."""
     import argparse
+    import sys
 
     from .harvest import OgmToParquet
 
@@ -425,9 +426,22 @@ def main():
 
     args = parser.parse_args()
 
+    # Validate OGM path exists
+    ogm_path = Path(args.ogm_path)
+    if not ogm_path.exists():
+        logger.error(f"OpenGeoMetadata directory not found: {ogm_path}")
+        logger.error("Run 'uv run ogm-harvest --download' to download repositories first.")
+        sys.exit(1)
+
     # Collect documents using harvester's collection logic
     harvester = OgmToParquet(ogm_path=args.ogm_path)
-    documents = harvester._collect_documents()
+    documents = harvester.collect_documents()
+
+    if not documents:
+        logger.error("No valid Aardvark documents found.")
+        logger.error("Ensure OGM repositories are downloaded and contain valid JSON files.")
+        sys.exit(1)
+
     logger.info(f"Collected {len(documents)} valid Aardvark documents")
 
     # Prepare enrichment

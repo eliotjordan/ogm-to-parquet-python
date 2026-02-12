@@ -483,7 +483,7 @@ def main():
         help=f"Delay between job submissions in seconds (default: {DEFAULT_DELAY})",
     )
     parser.add_argument(
-        "--id",
+        "--doc-id",
         type=str,
         default=None,
         help="Process only this document ID",
@@ -511,15 +511,24 @@ def main():
 
     args = parser.parse_args()
 
+    # Check database exists (not needed for stats or dry-run on specific doc)
+    db_path = Path(args.db_path)
+    if not db_path.exists():
+        logger.error(f"Derivatives database not found: {db_path}")
+        logger.error("Run 'uv run ogm-enrich-prepare' to create the database first.")
+        sys.exit(1)
+
     # Check Redis connection (not needed for dry-run)
     if not args.dry_run and not check_redis_connection(args.redis_url):
         logger.error("Cannot proceed without Redis connection")
+        logger.error("Start Redis with: docker compose up -d")
         sys.exit(1)
 
     # Check external tools (unless just stats/dry-run)
     if not args.stats and not args.dry_run:
         if not check_tools_available():
             logger.error("Cannot proceed without required tools")
+            logger.error("Install ogr2ogr (GDAL) and tippecanoe")
             sys.exit(1)
 
     processor = DerivativeProcessor(
@@ -535,7 +544,7 @@ def main():
     try:
         if args.dry_run:
             # Preview documents without processing
-            docs = processor.get_pending_documents(args.id)
+            docs = processor.get_pending_documents(args.doc_id)
             if not docs:
                 print("No documents to process")
             else:
@@ -570,7 +579,7 @@ def main():
         elif args.enqueue_only:
             # Just enqueue, don't start workers
             processor.ensure_retry_column()
-            enqueued = processor.enqueue_documents(args.id)
+            enqueued = processor.enqueue_documents(args.doc_id)
             print(f"Enqueued {enqueued} jobs")
             print("\nStart workers with: uv run ogm-enrich-derivatives --workers-only")
             print("Monitor with: rq-dashboard --redis-url redis://localhost:6379")
@@ -598,7 +607,7 @@ def main():
         else:
             # Full processing: enqueue + workers
             print("Monitor with: rq-dashboard --redis-url redis://localhost:6379")
-            worker_procs = processor.process_all(doc_id=args.id, workers=args.workers)
+            worker_procs = processor.process_all(doc_id=args.doc_id, workers=args.workers)
             if worker_procs:
                 try:
                     # Wait for interrupt

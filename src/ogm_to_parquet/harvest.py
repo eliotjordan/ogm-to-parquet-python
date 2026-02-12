@@ -110,7 +110,7 @@ class OgmToParquet:
 
     def convert(self) -> None:
         """Convert all JSON files to Parquet format with embeddings."""
-        docs = self._collect_documents()
+        docs = self.collect_documents()
 
         # Build vocabulary and distill model before processing documents
         if self.enable_embeddings:
@@ -179,7 +179,7 @@ class OgmToParquet:
         self.embedding_generator = EmbeddingGenerator(str(model_path))
         logger.info("Embedding model ready")
 
-    def _collect_documents(self) -> list[dict[str, Any]]:
+    def collect_documents(self) -> list[dict[str, Any]]:
         """Recursively collect all JSON documents from ogm_path.
 
         Only includes documents that have an 'id' field and 'gbl_mdVersion_s'
@@ -550,6 +550,18 @@ def main():
         default="./tmp/opengeometadata/",
         help="Path to OpenGeoMetadata data directory (default: ./tmp/opengeometadata/)",
     )
+    parser.add_argument(
+        "--output-path",
+        type=str,
+        default="./tmp/ogm.parquet",
+        help="Path for output Parquet file (default: ./tmp/ogm.parquet)",
+    )
+    parser.add_argument(
+        "--model-dir",
+        type=str,
+        default="./tmp/ogm-model/",
+        help="Directory to save distilled embedding model (default: ./tmp/ogm-model/)",
+    )
 
     args = parser.parse_args()
 
@@ -572,6 +584,8 @@ def main():
 
     harvester = OgmToParquet(
         ogm_path=args.ogm_path,
+        output_path=args.output_path,
+        model_dir=args.model_dir,
         enable_embeddings=not args.no_embeddings,
         embedding_dims=args.embedding_dims,
         max_vocab_size=args.max_vocab_size,
