@@ -217,10 +217,7 @@ class TestOgmToParquet:
 
     def test_extract_thumbnail_url_schema_org(self, harvester):
         """Test thumbnail extraction with schema.org URL."""
-        references = {
-            "http://schema.org/thumbnailUrl": "https://example.com/thumb.jpg",
-            "http://iiif.io/api/image": "https://example.com/iiif/info.json",
-        }
+        references = {"http://schema.org/thumbnailUrl": "https://example.com/thumb.jpg"}
         doc = {"references": json.dumps(references)}
 
         result = harvester._extract_thumbnail_url(doc)
@@ -230,6 +227,18 @@ class TestOgmToParquet:
     def test_extract_thumbnail_url_iiif(self, harvester):
         """Test thumbnail extraction with IIIF URL."""
         references = {"http://iiif.io/api/image": "https://example.com/iiif/info.json"}
+        doc = {"references": json.dumps(references)}
+
+        result = harvester._extract_thumbnail_url(doc)
+
+        assert result == "https://example.com/iiif/square/150,150/0/default.jpg"
+
+    def test_extract_thumbnail_url_both(self, harvester):
+        """Test thumbnail extraction with thumbailURL and IIIF Image API refs"""
+        references = {
+            "http://schema.org/thumbnailUrl": "https://example.com/thumb.jpg",
+            "http://iiif.io/api/image": "https://example.com/iiif/info.json",
+        }
         doc = {"references": json.dumps(references)}
 
         result = harvester._extract_thumbnail_url(doc)

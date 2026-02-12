@@ -473,7 +473,7 @@ class OgmToParquet:
     def _extract_thumbnail_url(self, doc: dict[str, Any]) -> str | None:
         """Extract thumbnail URL from references field.
 
-        Prefers schema.org thumbnailUrl, falls back to IIIF image API.
+        Prefers IIIF image API, falls back to schema.org thumbnailUrl.
 
         Args:
             doc: Document with potential references field
@@ -488,14 +488,14 @@ class OgmToParquet:
         try:
             refs_dict = json.loads(refs) if isinstance(refs, str) else refs
 
-            # Prefer schema.org thumbnail
-            if "http://schema.org/thumbnailUrl" in refs_dict:
-                return refs_dict["http://schema.org/thumbnailUrl"]
-
-            # Fall back to IIIF
+            # Prefer IIIF
             if "http://iiif.io/api/image" in refs_dict:
                 iiif_url = refs_dict["http://iiif.io/api/image"]
                 return iiif_url.replace("info.json", "square/150,150/0/default.jpg")
+
+            # Fall back to schema.org thumbnail
+            if "http://schema.org/thumbnailUrl" in refs_dict:
+                return refs_dict["http://schema.org/thumbnailUrl"]
 
         except Exception as e:
             logger.debug(f"Error parsing references: {e}")

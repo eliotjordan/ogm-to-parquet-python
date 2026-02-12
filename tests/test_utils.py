@@ -228,12 +228,7 @@ class TestGenerateOutputPath:
         result = generate_output_path(tmp_path, "060c078970f84019a0c0426016c9d151", ".pmtiles")
 
         expected = (
-            tmp_path
-            / "06"
-            / "0c"
-            / "07"
-            / "060c078970f84019a0c0426016c9d151"
-            / "dataset.pmtiles"
+            tmp_path / "06" / "0c" / "07" / "060c078970f84019a0c0426016c9d151" / "dataset.pmtiles"
         )
         assert result == expected
 
