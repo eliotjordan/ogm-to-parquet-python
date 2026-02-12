@@ -503,10 +503,17 @@ class OgmToParquet:
         return None
 
     def _write_parquet(self) -> None:
-        """Write collected rows to Parquet file with ZSTD compression."""
+        """Write collected rows to Parquet file with ZSTD compression.
+
+        Rows are sorted by id so DuckDB can use row group min/max statistics
+        to skip irrelevant groups during single-record lookups.
+        """
         if not self.rows:
             logger.warning("No rows to write")
             return
+
+        # Sort by id to enable row group statistics filtering in DuckDB
+        self.rows.sort(key=lambda row: row.get("id") or "")
 
         # Convert list of dicts to PyArrow Table
         table = pa.Table.from_pylist(self.rows, schema=PARQUET_SCHEMA)
@@ -514,13 +521,16 @@ class OgmToParquet:
         # Ensure output directory exists
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Write to Parquet with ZSTD compression
+        # Write to Parquet with ZSTD compression and smaller row groups.
+        # With ~80-100K records, row_group_size=5000 produces ~16-20 groups,
+        # allowing DuckDB to skip irrelevant groups on sorted id lookups.
         pq.write_table(
             table,
             self.output_path,
             compression="zstd",
             use_dictionary=True,
             write_statistics=True,
+            row_group_size=5000,
         )
 
 
