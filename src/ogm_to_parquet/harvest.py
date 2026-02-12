@@ -44,6 +44,8 @@ FIELD_MAP = {
     "locn_geometry": "geometry",
     "dcat_bbox": "bbox",
     "gbl_indexYear_im": "index_year",
+    "gbl_suppressed_b": "suppressed",
+    "dct_source_sm": "source",
 }
 
 # PyArrow schema for Parquet output
@@ -70,6 +72,8 @@ PARQUET_SCHEMA = pa.schema(
         ("wxs_identifier", pa.string()),
         ("modified", pa.string()),
         ("index_year", pa.list_(pa.float64())),
+        ("suppressed", pa.bool_()),
+        ("source", pa.string()),
         ("embeddings", pa.list_(pa.float32())),
     ]
 )
@@ -110,7 +114,7 @@ class OgmToParquet:
 
     def convert(self) -> None:
         """Convert all JSON files to Parquet format with embeddings."""
-        docs = self._collect_documents()
+        docs = self.collect_documents()
 
         # Build vocabulary and distill model before processing documents
         if self.enable_embeddings:
@@ -179,7 +183,7 @@ class OgmToParquet:
         self.embedding_generator = EmbeddingGenerator(str(model_path))
         logger.info("Embedding model ready")
 
-    def _collect_documents(self) -> list[dict[str, Any]]:
+    def collect_documents(self) -> list[dict[str, Any]]:
         """Recursively collect all JSON documents from ogm_path.
 
         Only includes documents that have an 'id' field and 'gbl_mdVersion_s'
@@ -357,6 +361,8 @@ class OgmToParquet:
             "wxs_identifier": self._ensure_string(doc.get("wxs_identifier")),
             "modified": self._ensure_string(doc.get("modified")),
             "index_year": self._ensure_float_list(doc.get("index_year")),
+            "suppressed": doc.get("suppressed"),
+            "source": self._extract_first_string(doc.get("source")),
             "embeddings": embeddings,
         }
 
@@ -435,6 +441,21 @@ class OgmToParquet:
             return " ".join(str(item) for item in value if item is not None) if value else None
         return str(value)
 
+    def _extract_first_string(self, value: Any) -> str | None:
+        """Extract the first element from a list as a string, or return a scalar string.
+
+        Args:
+            value: A list, scalar, or None
+
+        Returns:
+            First element as string, scalar as string, or None if empty/missing
+        """
+        if value is None:
+            return None
+        if isinstance(value, list):
+            return str(value[0]) if value else None
+        return str(value)
+
     def _extract_geojson(self, doc: dict[str, Any]) -> str | None:
         """Extract GeoJSON from bbox field.
 
@@ -452,7 +473,7 @@ class OgmToParquet:
     def _extract_thumbnail_url(self, doc: dict[str, Any]) -> str | None:
         """Extract thumbnail URL from references field.
 
-        Prefers schema.org thumbnailUrl, falls back to IIIF image API.
+        Prefers IIIF image API, falls back to schema.org thumbnailUrl.
 
         Args:
             doc: Document with potential references field
@@ -467,14 +488,14 @@ class OgmToParquet:
         try:
             refs_dict = json.loads(refs) if isinstance(refs, str) else refs
 
-            # Prefer schema.org thumbnail
-            if "http://schema.org/thumbnailUrl" in refs_dict:
-                return refs_dict["http://schema.org/thumbnailUrl"]
-
-            # Fall back to IIIF
+            # Prefer IIIF
             if "http://iiif.io/api/image" in refs_dict:
                 iiif_url = refs_dict["http://iiif.io/api/image"]
                 return iiif_url.replace("info.json", "square/150,150/0/default.jpg")
+
+            # Fall back to schema.org thumbnail
+            if "http://schema.org/thumbnailUrl" in refs_dict:
+                return refs_dict["http://schema.org/thumbnailUrl"]
 
         except Exception as e:
             logger.debug(f"Error parsing references: {e}")
@@ -550,6 +571,18 @@ def main():
         default="./tmp/opengeometadata/",
         help="Path to OpenGeoMetadata data directory (default: ./tmp/opengeometadata/)",
     )
+    parser.add_argument(
+        "--output-path",
+        type=str,
+        default="./tmp/ogm.parquet",
+        help="Path for output Parquet file (default: ./tmp/ogm.parquet)",
+    )
+    parser.add_argument(
+        "--model-dir",
+        type=str,
+        default="./tmp/ogm-model/",
+        help="Directory to save distilled embedding model (default: ./tmp/ogm-model/)",
+    )
 
     args = parser.parse_args()
 
@@ -572,6 +605,8 @@ def main():
 
     harvester = OgmToParquet(
         ogm_path=args.ogm_path,
+        output_path=args.output_path,
+        model_dir=args.model_dir,
         enable_embeddings=not args.no_embeddings,
         embedding_dims=args.embedding_dims,
         max_vocab_size=args.max_vocab_size,

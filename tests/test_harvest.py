@@ -16,12 +16,16 @@ class TestFieldMapping:
         assert "dct_title_s" in FIELD_MAP
         assert "schema_provider_s" in FIELD_MAP
         assert "gbl_resourceClass_sm" in FIELD_MAP
+        assert "gbl_suppressed_b" in FIELD_MAP
+        assert "dct_source_sm" in FIELD_MAP
 
     def test_field_map_values(self):
         """Test that FIELD_MAP maps to simplified names."""
         assert FIELD_MAP["dct_title_s"] == "title"
         assert FIELD_MAP["schema_provider_s"] == "provider"
         assert FIELD_MAP["gbl_resourceClass_sm"] == "resource_class"
+        assert FIELD_MAP["gbl_suppressed_b"] == "suppressed"
+        assert FIELD_MAP["dct_source_sm"] == "source"
 
 
 class TestOgmToParquet:
@@ -173,6 +177,26 @@ class TestOgmToParquet:
         result = harvester._ensure_float_list([1869, None, 1870])
         assert result == [1869.0, 1870.0]
 
+    def test_extract_first_string_with_none(self, harvester):
+        """Test _extract_first_string with None returns None."""
+        assert harvester._extract_first_string(None) is None
+
+    def test_extract_first_string_with_empty_list(self, harvester):
+        """Test _extract_first_string with empty list returns None."""
+        assert harvester._extract_first_string([]) is None
+
+    def test_extract_first_string_with_single_element_list(self, harvester):
+        """Test _extract_first_string with single-element list."""
+        assert harvester._extract_first_string(["abc-123"]) == "abc-123"
+
+    def test_extract_first_string_with_multi_element_list(self, harvester):
+        """Test _extract_first_string returns only the first element."""
+        assert harvester._extract_first_string(["first", "second", "third"]) == "first"
+
+    def test_extract_first_string_with_scalar(self, harvester):
+        """Test _extract_first_string with scalar string."""
+        assert harvester._extract_first_string("scalar-value") == "scalar-value"
+
     def test_extract_geojson_with_bbox(self, harvester):
         """Test GeoJSON extraction from bbox field."""
         doc = {"bbox": "ENVELOPE(-122, -121, 38, 37)"}
@@ -193,10 +217,7 @@ class TestOgmToParquet:
 
     def test_extract_thumbnail_url_schema_org(self, harvester):
         """Test thumbnail extraction with schema.org URL."""
-        references = {
-            "http://schema.org/thumbnailUrl": "https://example.com/thumb.jpg",
-            "http://iiif.io/api/image": "https://example.com/iiif/info.json",
-        }
+        references = {"http://schema.org/thumbnailUrl": "https://example.com/thumb.jpg"}
         doc = {"references": json.dumps(references)}
 
         result = harvester._extract_thumbnail_url(doc)
@@ -206,6 +227,18 @@ class TestOgmToParquet:
     def test_extract_thumbnail_url_iiif(self, harvester):
         """Test thumbnail extraction with IIIF URL."""
         references = {"http://iiif.io/api/image": "https://example.com/iiif/info.json"}
+        doc = {"references": json.dumps(references)}
+
+        result = harvester._extract_thumbnail_url(doc)
+
+        assert result == "https://example.com/iiif/square/150,150/0/default.jpg"
+
+    def test_extract_thumbnail_url_both(self, harvester):
+        """Test thumbnail extraction with thumbailURL and IIIF Image API refs"""
+        references = {
+            "http://schema.org/thumbnailUrl": "https://example.com/thumb.jpg",
+            "http://iiif.io/api/image": "https://example.com/iiif/info.json",
+        }
         doc = {"references": json.dumps(references)}
 
         result = harvester._extract_thumbnail_url(doc)
@@ -248,6 +281,8 @@ class TestOgmToParquet:
             "references": json.dumps(
                 {"http://schema.org/thumbnailUrl": "https://example.com/thumb.jpg"}
             ),
+            "suppressed": True,
+            "source": ["stanford-abc-123", "stanford-def-456"],
         }
 
         row = harvester._build_row(doc)
@@ -259,16 +294,18 @@ class TestOgmToParquet:
         assert row["resource_class"] == ["Maps"]
         assert row["thumbnail"] == "https://example.com/thumb.jpg"
         assert row["geojson"] is not None
+        assert row["suppressed"] is True
+        assert row["source"] == "stanford-abc-123"
         # Verify embeddings field exists (may be None if embeddings disabled)
         assert "embeddings" in row
 
-    def test_collect_documents_empty_directory(self, harvester):
+    def testcollect_documents_empty_directory(self, harvester):
         """Test collecting documents from empty directory."""
-        docs = harvester._collect_documents()
+        docs = harvester.collect_documents()
 
         assert docs == []
 
-    def test_collect_documents_with_json_files(self, harvester, tmp_path):
+    def testcollect_documents_with_json_files(self, harvester, tmp_path):
         """Test collecting documents from directory with JSON files."""
         ogm_path = tmp_path / "opengeometadata"
         ogm_path.mkdir(exist_ok=True)
@@ -284,13 +321,13 @@ class TestOgmToParquet:
         (subdir / "doc2.json").write_text(json.dumps(doc2))
 
         harvester = OgmToParquet(str(ogm_path), str(tmp_path / "output.parquet"))
-        docs = harvester._collect_documents()
+        docs = harvester.collect_documents()
 
         assert len(docs) == 2
         ids = {doc["id"] for doc in docs}
         assert ids == {"doc1", "doc2"}
 
-    def test_collect_documents_invalid_json(self, harvester, tmp_path, caplog):
+    def testcollect_documents_invalid_json(self, harvester, tmp_path, caplog):
         """Test collecting documents handles invalid JSON gracefully."""
         ogm_path = tmp_path / "opengeometadata"
         ogm_path.mkdir(exist_ok=True)
@@ -304,7 +341,7 @@ class TestOgmToParquet:
         )
 
         harvester = OgmToParquet(str(ogm_path), str(tmp_path / "output.parquet"))
-        docs = harvester._collect_documents()
+        docs = harvester.collect_documents()
 
         # Should collect only valid document
         assert len(docs) == 1
@@ -324,6 +361,8 @@ class TestOgmToParquet:
             "schema_provider_s": "Test Provider",
             "gbl_resourceClass_sm": ["Maps"],
             "dcat_bbox": "ENVELOPE(-122, -121, 38, 37)",
+            "gbl_suppressed_b": False,
+            "dct_source_sm": ["stanford-abc-123"],
         }
         (ogm_path / "test.json").write_text(json.dumps(doc))
 
@@ -333,6 +372,8 @@ class TestOgmToParquet:
         assert len(harvester.rows) == 1
         assert harvester.rows[0]["id"] == "test-123"
         assert harvester.rows[0]["title"] == "Test Title"
+        assert harvester.rows[0]["suppressed"] is False
+        assert harvester.rows[0]["source"] == "stanford-abc-123"
         assert output_path.exists()
 
     def test_remap_and_clean_integration(self, harvester):
@@ -381,7 +422,7 @@ class TestOgmToParquet:
         assert harvester.rows[0]["id"] == "good-123"
         assert output_path.exists()
 
-    def test_collect_documents_skips_non_dict_json(self, tmp_path):
+    def testcollect_documents_skips_non_dict_json(self, tmp_path):
         """Test that non-dict JSON documents are skipped."""
         ogm_path = tmp_path / "opengeometadata"
         output_path = tmp_path / "output.parquet"
@@ -399,7 +440,7 @@ class TestOgmToParquet:
         )
 
         harvester = OgmToParquet(str(ogm_path), str(output_path))
-        docs = harvester._collect_documents()
+        docs = harvester.collect_documents()
 
         # Should only collect the valid dict document
         assert len(docs) == 1
@@ -430,7 +471,7 @@ class TestOgmToParquet:
         assert harvester.rows[0]["id"] == "valid-123"
         assert output_path.exists()
 
-    def test_collect_documents_skips_non_aardvark(self, tmp_path):
+    def testcollect_documents_skips_non_aardvark(self, tmp_path):
         """Test that documents without gbl_mdVersion_s=Aardvark are skipped."""
         ogm_path = tmp_path / "opengeometadata"
         output_path = tmp_path / "output.parquet"
@@ -448,13 +489,13 @@ class TestOgmToParquet:
         )
 
         harvester = OgmToParquet(str(ogm_path), str(output_path))
-        docs = harvester._collect_documents()
+        docs = harvester.collect_documents()
 
         # Should only collect the Aardvark document
         assert len(docs) == 1
         assert docs[0]["id"] == "valid-123"
 
-    def test_collect_documents_skips_missing_id(self, tmp_path):
+    def testcollect_documents_skips_missing_id(self, tmp_path):
         """Test that documents without id field are skipped."""
         ogm_path = tmp_path / "opengeometadata"
         output_path = tmp_path / "output.parquet"
@@ -476,13 +517,13 @@ class TestOgmToParquet:
         )
 
         harvester = OgmToParquet(str(ogm_path), str(output_path))
-        docs = harvester._collect_documents()
+        docs = harvester.collect_documents()
 
         # Should only collect document with valid id
         assert len(docs) == 1
         assert docs[0]["id"] == "valid-123"
 
-    def test_collect_documents_deduplicates_by_id(self, tmp_path):
+    def testcollect_documents_deduplicates_by_id(self, tmp_path):
         """Test that duplicate documents with same id are deduplicated."""
         ogm_path = tmp_path / "opengeometadata"
         output_path = tmp_path / "output.parquet"
@@ -525,7 +566,7 @@ class TestOgmToParquet:
         )
 
         harvester = OgmToParquet(str(ogm_path), str(output_path))
-        docs = harvester._collect_documents()
+        docs = harvester.collect_documents()
 
         # Should only have 2 documents (one duplicate skipped)
         assert len(docs) == 2

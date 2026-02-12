@@ -6,19 +6,20 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from ogm_to_parquet.config import IMAGE_FORMATS, VECTOR_FORMATS
+from ogm_to_parquet.converters import extract_archive
 from ogm_to_parquet.derivative_jobs import (
-    IMAGE_FORMATS,
-    VECTOR_FORMATS,
-    clean_doc_id,
-    cleanup_scratch,
-    download_file,
-    extract_archive,
-    generate_output_path,
     increment_retry_count,
     process_derivative,
     update_status,
 )
 from ogm_to_parquet.derivatives import DerivativeProcessor
+from ogm_to_parquet.utils import (
+    clean_doc_id,
+    cleanup_scratch,
+    download_file,
+    generate_output_path,
+)
 
 
 class TestGenerateOutputPath:
@@ -106,7 +107,7 @@ class TestDownloadFile:
         mock_response = MagicMock()
         mock_response.iter_content.return_value = [b'{"type": "FeatureCollection"}']
 
-        with patch("ogm_to_parquet.derivative_jobs.requests.get") as mock_get:
+        with patch("ogm_to_parquet.utils.requests.get") as mock_get:
             mock_get.return_value.__enter__ = MagicMock(return_value=mock_response)
             mock_get.return_value = mock_response
             result = download_file("http://example.com/data.geojson", dest)
@@ -118,7 +119,7 @@ class TestDownloadFile:
         """Test that download creates parent directories."""
         dest = tmp_path / "nested" / "path" / "test.json"
 
-        with patch("ogm_to_parquet.derivative_jobs.requests.get") as mock_get:
+        with patch("ogm_to_parquet.utils.requests.get") as mock_get:
             mock_response = MagicMock()
             mock_response.iter_content.return_value = [b"data"]
             mock_get.return_value = mock_response
@@ -132,7 +133,7 @@ class TestDownloadFile:
 
         dest = tmp_path / "test.json"
 
-        with patch("ogm_to_parquet.derivative_jobs.requests.get") as mock_get:
+        with patch("ogm_to_parquet.utils.requests.get") as mock_get:
             mock_get.side_effect = req.RequestException("Network error")
             result = download_file("http://example.com/data.json", dest)
 
