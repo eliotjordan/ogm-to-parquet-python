@@ -114,7 +114,9 @@ EXCLUDED_SERVICE_KEYS = frozenset(
 )
 
 # Formats eligible for cloud derivative generation
-DERIVATIVE_FORMATS = frozenset({"GeoJSON", "GeoPackage", "KML", "Shapefile", "JPEG", "JPEG2000", "TIFF"})
+DERIVATIVE_FORMATS = frozenset(
+    {"GeoJSON", "GeoPackage", "KML", "Shapefile", "JPEG", "JPEG2000", "TIFF"}
+)
 
 # Vector formats that convert to PMTiles
 VECTOR_FORMATS = frozenset({"GeoJSON", "GeoPackage", "KML", "Shapefile"})

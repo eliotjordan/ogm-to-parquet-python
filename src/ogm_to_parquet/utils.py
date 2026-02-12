@@ -128,7 +128,9 @@ def check_tool_available(tool_name: str) -> bool:
         return False
 
 
-def check_prerequisites(checks: list[str], redis_url: str = "redis://localhost:6379") -> dict[str, bool]:
+def check_prerequisites(
+    checks: list[str], redis_url: str = "redis://localhost:6379"
+) -> dict[str, bool]:
     """Validate availability of required prerequisites.
 
     Args:

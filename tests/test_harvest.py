@@ -16,12 +16,16 @@ class TestFieldMapping:
         assert "dct_title_s" in FIELD_MAP
         assert "schema_provider_s" in FIELD_MAP
         assert "gbl_resourceClass_sm" in FIELD_MAP
+        assert "gbl_suppressed_b" in FIELD_MAP
+        assert "dct_source_sm" in FIELD_MAP
 
     def test_field_map_values(self):
         """Test that FIELD_MAP maps to simplified names."""
         assert FIELD_MAP["dct_title_s"] == "title"
         assert FIELD_MAP["schema_provider_s"] == "provider"
         assert FIELD_MAP["gbl_resourceClass_sm"] == "resource_class"
+        assert FIELD_MAP["gbl_suppressed_b"] == "suppressed"
+        assert FIELD_MAP["dct_source_sm"] == "source"
 
 
 class TestOgmToParquet:
@@ -173,6 +177,26 @@ class TestOgmToParquet:
         result = harvester._ensure_float_list([1869, None, 1870])
         assert result == [1869.0, 1870.0]
 
+    def test_extract_first_string_with_none(self, harvester):
+        """Test _extract_first_string with None returns None."""
+        assert harvester._extract_first_string(None) is None
+
+    def test_extract_first_string_with_empty_list(self, harvester):
+        """Test _extract_first_string with empty list returns None."""
+        assert harvester._extract_first_string([]) is None
+
+    def test_extract_first_string_with_single_element_list(self, harvester):
+        """Test _extract_first_string with single-element list."""
+        assert harvester._extract_first_string(["abc-123"]) == "abc-123"
+
+    def test_extract_first_string_with_multi_element_list(self, harvester):
+        """Test _extract_first_string returns only the first element."""
+        assert harvester._extract_first_string(["first", "second", "third"]) == "first"
+
+    def test_extract_first_string_with_scalar(self, harvester):
+        """Test _extract_first_string with scalar string."""
+        assert harvester._extract_first_string("scalar-value") == "scalar-value"
+
     def test_extract_geojson_with_bbox(self, harvester):
         """Test GeoJSON extraction from bbox field."""
         doc = {"bbox": "ENVELOPE(-122, -121, 38, 37)"}
@@ -248,6 +272,8 @@ class TestOgmToParquet:
             "references": json.dumps(
                 {"http://schema.org/thumbnailUrl": "https://example.com/thumb.jpg"}
             ),
+            "suppressed": True,
+            "source": ["stanford-abc-123", "stanford-def-456"],
         }
 
         row = harvester._build_row(doc)
@@ -259,6 +285,8 @@ class TestOgmToParquet:
         assert row["resource_class"] == ["Maps"]
         assert row["thumbnail"] == "https://example.com/thumb.jpg"
         assert row["geojson"] is not None
+        assert row["suppressed"] is True
+        assert row["source"] == "stanford-abc-123"
         # Verify embeddings field exists (may be None if embeddings disabled)
         assert "embeddings" in row
 
@@ -324,6 +352,8 @@ class TestOgmToParquet:
             "schema_provider_s": "Test Provider",
             "gbl_resourceClass_sm": ["Maps"],
             "dcat_bbox": "ENVELOPE(-122, -121, 38, 37)",
+            "gbl_suppressed_b": False,
+            "dct_source_sm": ["stanford-abc-123"],
         }
         (ogm_path / "test.json").write_text(json.dumps(doc))
 
@@ -333,6 +363,8 @@ class TestOgmToParquet:
         assert len(harvester.rows) == 1
         assert harvester.rows[0]["id"] == "test-123"
         assert harvester.rows[0]["title"] == "Test Title"
+        assert harvester.rows[0]["suppressed"] is False
+        assert harvester.rows[0]["source"] == "stanford-abc-123"
         assert output_path.exists()
 
     def test_remap_and_clean_integration(self, harvester):

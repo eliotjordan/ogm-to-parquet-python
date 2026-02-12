@@ -44,6 +44,8 @@ FIELD_MAP = {
     "locn_geometry": "geometry",
     "dcat_bbox": "bbox",
     "gbl_indexYear_im": "index_year",
+    "gbl_suppressed_b": "suppressed",
+    "dct_source_sm": "source",
 }
 
 # PyArrow schema for Parquet output
@@ -70,6 +72,8 @@ PARQUET_SCHEMA = pa.schema(
         ("wxs_identifier", pa.string()),
         ("modified", pa.string()),
         ("index_year", pa.list_(pa.float64())),
+        ("suppressed", pa.bool_()),
+        ("source", pa.string()),
         ("embeddings", pa.list_(pa.float32())),
     ]
 )
@@ -357,6 +361,8 @@ class OgmToParquet:
             "wxs_identifier": self._ensure_string(doc.get("wxs_identifier")),
             "modified": self._ensure_string(doc.get("modified")),
             "index_year": self._ensure_float_list(doc.get("index_year")),
+            "suppressed": doc.get("suppressed"),
+            "source": self._extract_first_string(doc.get("source")),
             "embeddings": embeddings,
         }
 
@@ -433,6 +439,21 @@ class OgmToParquet:
         if isinstance(value, list):
             # Join list elements with space, filtering out None values
             return " ".join(str(item) for item in value if item is not None) if value else None
+        return str(value)
+
+    def _extract_first_string(self, value: Any) -> str | None:
+        """Extract the first element from a list as a string, or return a scalar string.
+
+        Args:
+            value: A list, scalar, or None
+
+        Returns:
+            First element as string, scalar as string, or None if empty/missing
+        """
+        if value is None:
+            return None
+        if isinstance(value, list):
+            return str(value[0]) if value else None
         return str(value)
 
     def _extract_geojson(self, doc: dict[str, Any]) -> str | None:
