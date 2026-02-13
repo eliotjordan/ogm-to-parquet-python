@@ -522,7 +522,7 @@ class OgmToParquet:
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Write to Parquet with ZSTD compression and smaller row groups.
-        # With ~80-100K records, row_group_size=5000 produces ~16-20 groups,
+        # With ~80-100K records, row_group_size=2048 produces ~16-20 groups,
         # allowing DuckDB to skip irrelevant groups on sorted id lookups.
         pq.write_table(
             table,
@@ -530,7 +530,7 @@ class OgmToParquet:
             compression="zstd",
             use_dictionary=True,
             write_statistics=True,
-            row_group_size=5000,
+            row_group_size=2048,
         )
 
 
